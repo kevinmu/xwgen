@@ -1,6 +1,7 @@
 """Class representing the crossword grid."""
 from typing import List, Tuple
 
+from entry import Entry, Direction
 from square import Square
 
 
@@ -43,7 +44,7 @@ class Grid:
             self.board[r][c].is_black = True
             self.board[self.rows-1-r][self.cols-1-c].is_black = True
 
-    def number_squares(self):
+    def number_squares(self) -> None:
         for r, row in enumerate(self.board):
             for c, square in enumerate(row):
                 if square.is_black:
@@ -54,6 +55,21 @@ class Grid:
                 # this represents the start of a new word; give it an index
                 if has_empty_square_above or has_empty_square_on_left:
                     square.index = self.get_next_index()
+
+                # specify what kinds of words this square will start
+                square.starts_down_word = has_empty_square_above
+                square.starts_across_word = has_empty_square_on_left
+
+    def generate_entries_from_numbered_squares(self) -> List[Entry]:
+        entries = []
+        for r, row in enumerate(self.board):
+            for c, square in enumerate(row):
+                if square.starts_across_word:
+                    entries.append(Entry(square.index, Direction.ACROSS))
+                if square.starts_down_word:
+                    entries.append(Entry(square.index, Direction.DOWN))
+
+        return entries
 
     @staticmethod
     def _merge_square_render_strs(str1: str, str2: str) -> str:

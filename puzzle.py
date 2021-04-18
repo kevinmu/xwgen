@@ -17,7 +17,7 @@ class Puzzle:
     @staticmethod
     def new_puzzle(length: int, width: int):
         grid = Grid(length, width)
-        entries: List[Entry] = []
+        entries = grid.generate_entries_from_numbered_squares()
         return Puzzle(grid, entries)
 
     def render(self):

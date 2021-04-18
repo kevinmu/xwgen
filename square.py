@@ -6,31 +6,36 @@ class Square:
     is_black: bool
     letter: Optional[str]
     index: Optional[int]
+    starts_down_word: bool
+    starts_across_word: bool
 
     def __init__(
         self,
         is_black: bool = False,
         letter: str = None,
         index: int = None,
+        starts_down_word: bool = False,
+        starts_across_word: bool = False,
     ):
         self.is_black = is_black
         self.letter = letter
         self.index = index
+        self.starts_down_word = starts_down_word
+        self.starts_across_word = starts_across_word
 
     # Example of one square rendered:
-    # +-------+
-    # |129    |
-    # |   A   |
-    # +-------+
+    # +—————+
+    # |129  |
+    # |  A  |
+    # +—————+
     # Example of five squares rendered next to each other,
     # with the left-most square being a black square:
-    # +-------++-------++-------++-------++-------+
-    # |*******||129    ||       ||       ||       |
-    # |*******||   A   ||   B   ||   _   ||   A   |
-    # +-------++-------++-------++-------++-------+
+    # +—————++—————++—————++—————++—————+
+    # |█████||129  ||     ||     ||     |
+    # |█████||  A  ||  B  ||  _  ||  A  |
+    # +—————++—————++—————++—————++—————+
     def get_render_str(self):
         border_str = "+—————+"
-
         if self.is_black:
             # top-border
             render_str = f"{border_str}\n"
