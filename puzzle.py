@@ -78,45 +78,59 @@ class Puzzle:
         entries = {}
         for r, row in enumerate(self.grid):
             for c, square in enumerate(row):
+                squares_for_entry = []
                 if square.starts_across_word:
                     i = 0
                     while c + i < self.cols and not self.grid[r][c+i].is_black:
+                        squares_for_entry.append(self.grid[r][c+i])
                         i += 1
 
                     entry = Entry(square.index, Direction.ACROSS, r, c, i)
                     entries[entry.index_str()] = entry
+                    for square_for_entry in squares_for_entry:
+                        square_for_entry.across_entry_parent = entry
+
                 if square.starts_down_word:
                     i = 0
+                    squares_for_entry = []
                     while r + i < self.rows and not self.grid[r+i][c].is_black:
+                        squares_for_entry.append(self.grid[r+i][c])
                         i += 1
 
                     entry = Entry(square.index, Direction.DOWN, r, c, i)
                     entries[entry.index_str()] = entry
+                    for square_for_entry in squares_for_entry:
+                        square_for_entry.down_entry_parent = entry
 
         return entries
 
-    def fill_entry(self, entry: Entry, answer: str) -> None:
+    # returns a list of the affected squares
+    def fill_entry(self, entry: Entry, answer: str) -> List[Square]:
         assert len(answer) == entry.answer_length, \
             f"Answer {answer} has length {len(answer)}, but entry " \
             f"{entry.index_str()} has length {entry.answer_length}"
-        r = entry.row_in_grid
-        c = entry.col_in_grid
-        if entry.direction == Direction.DOWN:
-            for i, letter in enumerate(answer):
-                self.grid[r + i][c].letter = letter
-        else:
-            for i, letter in enumerate(answer):
-                self.grid[r][c+i].letter = letter
 
-    def erase_entry(self, entry: Entry) -> None:
+        newly_affected_squares = []
         r = entry.row_in_grid
         c = entry.col_in_grid
         if entry.direction == Direction.DOWN:
-            for i in range(entry.answer_length):
-                self.grid[r + i][c].letter = None
+            for i, letter in enumerate(answer):
+                square = self.grid[r + i][c]
+                if square.letter != letter:
+                    square.letter = letter
+                    newly_affected_squares.append(square)
         else:
-            for i in range(entry.answer_length):
-                self.grid[r][c+i].letter = None
+            for i, letter in enumerate(answer):
+                square = self.grid[r][c+i]
+                if square.letter != letter:
+                    square.letter = letter
+                    newly_affected_squares.append(square)
+
+        return newly_affected_squares
+
+    def erase_squares(self, squares: List[Square]) -> None:
+        for square in squares:
+            square.letter = None
 
     def render(self):
         for i, row in enumerate(self.grid):
