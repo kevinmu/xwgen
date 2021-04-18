@@ -1,27 +1,18 @@
 """Class representing the a single square in the crossword grid."""
+from dataclasses import dataclass
 from typing import Optional
 
+from entry import Entry
 
+@dataclass
 class Square:
-    is_black: bool
-    letter: Optional[str]
-    index: Optional[int]
-    starts_down_word: bool
-    starts_across_word: bool
-
-    def __init__(
-        self,
-        is_black: bool = False,
-        letter: str = None,
-        index: int = None,
-        starts_down_word: bool = False,
-        starts_across_word: bool = False,
-    ):
-        self.is_black = is_black
-        self.letter = letter
-        self.index = index
-        self.starts_down_word = starts_down_word
-        self.starts_across_word = starts_across_word
+    is_black: bool = False
+    letter: Optional[str] = None
+    index: Optional[int] = None
+    starts_down_word: bool = False
+    starts_across_word: bool = False
+    across_entry_parent: Optional[Entry] = None
+    down_entry_parent: Optional[Entry] = None
 
     # Example of one square rendered:
     # +—————+

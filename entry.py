@@ -22,5 +22,8 @@ class Entry:
     def index_str(self) -> str:
         return f"{self.index}{self.direction.value}"
 
-    def render_clue(self):
+    def render_clue(self) -> None:
         print(f"{self.index_str()}: {self.clue} ({self.answer_length})")
+
+    def __hash__(self) -> int:
+        return hash(self.index_str())
