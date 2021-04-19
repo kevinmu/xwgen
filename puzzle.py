@@ -18,32 +18,8 @@ class Puzzle:
         self.rows = rows
         self.cols = cols
 
-        self.grid = [[Square() for j in range(cols)] for i in range(rows)]
-        '''self.mark_black_squares([
-            (0, 8),
-            (1, 8),
-            (2, 8),
-            (3, 0), (3, 1), (3, 2), (3, 11),
-            (4, 5), (4, 10),
-            (5, 4), (5, 9), (5, 13), (5, 14),
-            (6, 3), (6, 14),
-            (7, 7),
-        ])'''
-
-        self.mark_black_squares([
-            (0, 4), (0,9),
-            (1, 4), (1, 9),
-            (2, 4),
-            (3, 6), (3, 12), (3, 13), (3, 14),
-            (4, 11),
-            (5, 0), (5, 1), (5, 2), (5, 3), (5, 7), (5, 8),
-            (6, 0),
-            (7, 4), (7, 5), (7, 9), (7, 10)
-        ])
+        self.grid = [[Square() for _ in range(cols)] for _ in range(rows)]
         self.index = 0
-
-        self.number_squares()
-        self.entries = self.generate_entries_from_numbered_squares()
 
     def get_next_index(self):
         self.index += 1
@@ -58,7 +34,15 @@ class Puzzle:
             self.grid[r][c].is_black = True
             self.grid[self.rows - 1 - r][self.cols - 1 - c].is_black = True
 
-    def number_squares(self) -> None:
+    def mark_black_square(self, coordinate: Tuple[int, int]):
+        return self.mark_black_squares([coordinate])
+
+    # setup function to be run after setting all black squares
+    def initialize(self) -> None:
+        self._number_squares()
+        self.entries = self._generate_entries_from_numbered_squares()
+
+    def _number_squares(self) -> None:
         for r, row in enumerate(self.grid):
             for c, square in enumerate(row):
                 if square.is_black:
@@ -74,7 +58,7 @@ class Puzzle:
                 square.starts_down_word = has_empty_square_above
                 square.starts_across_word = has_empty_square_on_left
 
-    def generate_entries_from_numbered_squares(self) -> Dict[str, Entry]:
+    def _generate_entries_from_numbered_squares(self) -> Dict[str, Entry]:
         entries = {}
         for r, row in enumerate(self.grid):
             for c, square in enumerate(row):
@@ -104,6 +88,37 @@ class Puzzle:
 
         return entries
 
+    def get_entries_sorted_by_length_asc(self) -> List[Entry]:
+        entries = self.get_entries_sorted_by_length_desc()
+        entries.reverse()
+        return entries
+
+    def get_entries_sorted_by_length_desc(self) -> List[Entry]:
+        entries_list = []
+        for entry in self.entries.values():
+            entries_list.append(entry)
+
+        # Heuristic #1: fill in longer words first
+        #               because they are harder to fill.
+        def entry_sort_by_fn(e: Entry) -> int:
+            return e.answer_length
+
+        entries_list.sort(key=entry_sort_by_fn, reverse=True)
+        return entries_list
+
+    def get_entries_sorted_by_index_str_asc(self) -> List[Entry]:
+        entries_list = []
+        for entry in self.entries.values():
+            entries_list.append(entry)
+
+        # Heuristic #1: fill in longer words first
+        #               because they are harder to fill.
+        def entry_sort_by_fn(e: Entry) -> int:
+            return e.index
+
+        entries_list.sort(key=entry_sort_by_fn, reverse=True)
+        return entries_list
+
     # returns a list of the affected squares
     def fill_entry(self, entry: Entry, answer: str) -> List[Square]:
         assert len(answer) == entry.answer_length, \
@@ -131,6 +146,40 @@ class Puzzle:
     def erase_squares(self, squares: List[Square]) -> None:
         for square in squares:
             square.letter = None
+
+    def export_as_ascii(self, outfile: str):
+        puzzle_ascii = ""
+        for r in range(self.rows):
+            for c in range(self.cols):
+                sq = self.grid[r][c]
+                if sq.is_black:
+                    puzzle_ascii += "*"
+                elif sq.letter is None:
+                    puzzle_ascii += "-"
+                else:
+                    puzzle_ascii += sq.letter
+            puzzle_ascii += "\n"
+        with open(outfile, "w") as f:
+            f.write(puzzle_ascii)
+
+    @staticmethod
+    def import_from_ascii(infile: str) -> 'Puzzle':
+        with open(infile, "r") as f:
+            puzzle_ascii = f.read()
+
+        lines = puzzle_ascii.splitlines()
+        rows = len(lines)
+        cols = len(lines[0])
+        puzzle = Puzzle(rows=rows, cols=cols)
+        for r, line in enumerate(lines):
+            for c, letter in enumerate(line):
+                if letter == "*":
+                    puzzle.mark_black_square((r, c))
+                elif letter != "-":
+                    puzzle.grid[r][c].letter = letter
+
+        puzzle.initialize()
+        return puzzle
 
     def render(self):
         for i, row in enumerate(self.grid):
