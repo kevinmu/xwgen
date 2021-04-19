@@ -135,15 +135,24 @@ class WordFiller:
                 ).difference({entry})
 
             # TODO(kevin): change heuristic to account for more than just 1 entry?
-            fewest_matches = 1000  # some big number
+            num_matches = []  # some big number
             for newly_affected_entry in newly_affected_entries:
                 possible_matches_for_entry = self.get_possible_answers_for_entry(puzzle, newly_affected_entry)
-                if len(possible_matches_for_entry) < fewest_matches:
-                    fewest_matches = len(possible_matches_for_entry)
-                    # print(f"{newly_affected_entry.index_str()}: {possible_matches_for_entry}")
+                num_matches.append(len(possible_matches_for_entry))
+            num_matches.sort()
+
+            fill_score = 1000
+            if len(num_matches) == 0:
+                fill_score = 999
+            elif len(num_matches) == 1:
+                fill_score = num_matches[0]
+            elif num_matches[0] == 0:
+                fill_score = 0
+            else:
+                fill_score = num_matches[0]*0.8 + num_matches[1]*0.2
 
             answers_with_scores_and_affected_squares[random_answer] = \
-                (fewest_matches, newly_affected_squares)
+                (fill_score, newly_affected_squares)
 
             # reset the puzzle for the next iteration
             puzzle.erase_squares(newly_affected_squares)
@@ -153,10 +162,14 @@ class WordFiller:
         sorted_answers.sort(key=lambda a: answers_with_scores_and_affected_squares[a][0], reverse=True)
         best_answer = sorted_answers[visit_number] if visit_number < len(sorted_answers) else ""
         if best_answer == "":
+            print("TOO MANY VISITS")
             return "", []
 
         fill_score = answers_with_scores_and_affected_squares[best_answer][0]
         if fill_score == 0:
+            print(
+                f"NO ANSWER for {entry.index_str()} - fill score of {fill_score}",
+            )
             return "", []
 
         affected_squares = answers_with_scores_and_affected_squares[best_answer][1]
@@ -196,7 +209,7 @@ class WordFiller:
                     break
                 square_cur = puzzle.grid[r_cur][c_cur]
 
-        print(f"{entry.index_str()} HINT IS {hint}")
+        #print(f"{entry.index_str()} HINT IS {hint}")
         possible_matches = self.get_possible_words(hint)
         #if len(possible_matches) == 0:
             #print(f"NOTHING MATCHES HINT {hint}!")
