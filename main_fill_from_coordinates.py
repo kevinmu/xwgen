@@ -1,6 +1,6 @@
 """Main runner class for xwgen"""
 from puzzle import Puzzle
-from word_filler import WordFiller
+from puzzle_filler import PuzzleFiller
 
 
 def main():
@@ -29,9 +29,9 @@ def main():
     puzzle.initialize()
     puzzle.render()
 
-    word_filler = WordFiller()
-    success_words_count, failed_words_count = word_filler.fill_puzzle_using_heuristic(puzzle)
-    #word_filler.fill_puzzle_using_backtracking(puzzle)
+    puzzle_filler = PuzzleFiller()
+    success_words_count, failed_words_count = puzzle_filler.fill_puzzle_using_heuristic(puzzle)
+    #puzzle_filler.fill_puzzle_using_backtracking(puzzle)
 
     puzzle.render()
     print(f"Succeeded: {success_words_count}, Failed: {failed_words_count}")

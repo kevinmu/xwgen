@@ -5,7 +5,7 @@ from entry import Entry, Direction
 from square import Square
 from string_utils import merge_strings_with_same_num_lines
 from string_utils import remove_last_line_from_string
-
+from word_filler import WordFiller
 
 class Puzzle:
     rows: int
@@ -118,6 +118,22 @@ class Puzzle:
             return e.answer_length
 
         entries_list.sort(key=entry_sort_by_fn, reverse=True)
+        return entries_list
+
+    def get_entries_sorted_by_num_possible_matches_asc(
+        self,
+        word_filler: WordFiller,
+    ) -> List[Entry]:
+        entries_list = []
+        for entry in self.entries.values():
+            entries_list.append(entry)
+
+        # Heuristic #2: fill in words with fewer possibilities first
+        #               because they are harder to fill.
+        def entry_sort_by_fn(e: Entry) -> int:
+            return e.get_num_possible_matches(word_filler)
+
+        entries_list.sort(key=entry_sort_by_fn)
         return entries_list
 
     def get_entries_sorted_by_index_str_asc(self) -> List[Entry]:

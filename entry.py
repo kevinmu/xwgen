@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple, List
 
+from word_filler import WordFiller
 from square import Square
 
 
@@ -31,11 +32,18 @@ class Entry:
             print(f"{entry.index_str()} does not intersect with {self.index_str()}")
         return len(common_squares) > 0
 
-    def get_current_fill(self) -> str:
-        current_fill = ""
+    def get_current_hint(self) -> str:
+        current_hint = ""
         for sq in self.squares:
-            current_fill += sq.letter if sq.letter is not None else "_"
-        return current_fill
+            current_hint += sq.letter if sq.letter is not None else "."
+        return current_hint
+
+    def get_possible_matches(self, word_filler: WordFiller) -> List[str]:
+        current_hint = self.get_current_hint()
+        return word_filler.get_possible_words_for_hint(current_hint)
+
+    def get_num_possible_matches(self, word_filler: WordFiller):
+        return len(self.get_possible_matches(word_filler))
 
     def _get_square_indices(self) -> List[Tuple[int, int]]:
         r = self.row_in_grid
