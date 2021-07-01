@@ -2,7 +2,6 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from entry import Entry
 
 @dataclass
 class Square:
@@ -11,8 +10,8 @@ class Square:
     index: Optional[int] = None
     starts_down_word: bool = False
     starts_across_word: bool = False
-    across_entry_parent: Optional[Entry] = None
-    down_entry_parent: Optional[Entry] = None
+    across_entry_parent: Optional[str] = None
+    down_entry_parent: Optional[str] = None
 
     # Example of one square rendered:
     # +—————+

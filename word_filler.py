@@ -2,9 +2,9 @@
 import random
 import re
 from collections import Counter
-from typing import Dict, Set, List, Tuple
+from typing import Dict, List, Tuple
 
-from entry import Entry, Direction
+from entry import Entry
 from puzzle import Puzzle
 from square import Square
 
@@ -86,11 +86,11 @@ class WordFiller:
         entry: Entry,
         visit_number: int
     ) -> Tuple[str, List[Square]]:
-        possible_matches = self.get_possible_answers_for_entry(puzzle, entry)
+        possible_matches = self.get_possible_answers_for_entry(entry)
 
         # we've exhausted all possible matches for this entry; fail.
         if visit_number > 20 or len(possible_matches) <= visit_number:
-            print(f"COULNDT FIND VIABLE MATCH FOR {entry.index_str()}")
+            print(f"COULDN'T FIND VIABLE MATCH FOR {entry.index_str()}")
             return "", []
 
         next_answer_to_try = possible_matches[visit_number]
@@ -119,7 +119,7 @@ class WordFiller:
         entry: Entry,
         visit_number: int,
     ) -> Tuple[str, List[Square]]:
-        possible_matches = self.get_possible_answers_for_entry(puzzle, entry)
+        possible_matches = self.get_possible_answers_for_entry(entry)
         if len(possible_matches) == 0:
             return "", []
 
@@ -130,14 +130,14 @@ class WordFiller:
             random_answer = possible_matches[i]
             newly_affected_squares = puzzle.fill_entry(entry, random_answer)
             newly_affected_entries = \
-                set([sq.down_entry_parent for sq in newly_affected_squares]).union(
-                    set([sq.across_entry_parent for sq in newly_affected_squares])
+                set([puzzle.entries[sq.down_entry_parent] for sq in newly_affected_squares]).union(
+                    set([puzzle.entries[sq.across_entry_parent] for sq in newly_affected_squares])
                 ).difference({entry})
 
             # TODO(kevin): change heuristic to account for more than just 1 entry?
             num_matches = []  # some big number
             for newly_affected_entry in newly_affected_entries:
-                possible_matches_for_entry = self.get_possible_answers_for_entry(puzzle, newly_affected_entry)
+                possible_matches_for_entry = self.get_possible_answers_for_entry(newly_affected_entry)
                 num_matches.append(len(possible_matches_for_entry))
             num_matches.sort()
 
@@ -182,43 +182,14 @@ class WordFiller:
         puzzle.fill_entry(entry, best_answer)
         return best_answer, affected_squares
 
-    def get_possible_answers_for_entry(
-        self,
-        puzzle: Puzzle,
-        entry: Entry,
-    ) -> List[str]:
-        # find the index
-        r_cur = entry.row_in_grid
-        c_cur = entry.col_in_grid
-        square_cur = puzzle.grid[r_cur][c_cur]
-
-        # construct hint from existing puzzle
-        hint = ""
-        if entry.direction == Direction.DOWN:
-            while not square_cur.is_black:
-                hint += "." if square_cur.letter is None else square_cur.letter
-                r_cur += 1
-                if r_cur == puzzle.rows:
-                    break
-                square_cur = puzzle.grid[r_cur][c_cur]
-        else:
-            while not square_cur.is_black:
-                hint += "." if square_cur.letter is None else square_cur.letter
-                c_cur += 1
-                if c_cur == puzzle.cols:
-                    break
-                square_cur = puzzle.grid[r_cur][c_cur]
-
-        #print(f"{entry.index_str()} HINT IS {hint}")
-        possible_matches = self.get_possible_words(hint)
-        #if len(possible_matches) == 0:
-            #print(f"NOTHING MATCHES HINT {hint}!")
-
+    def get_possible_answers_for_entry(self,entry: Entry) -> List[str]:
+        hint = entry.get_current_fill()
+        possible_matches = self.get_possible_words_for_hint(hint)
         return possible_matches
 
     # returns possible matches for the given hint, up to 1000 matches.
     # hint format: ".A..BC..D."
-    def get_possible_words(self, hint: str) -> List[str]:
+    def get_possible_words_for_hint(self, hint: str) -> List[str]:
         matches = list()
         word_len = len(hint)
         num_matches = 0

@@ -48,15 +48,15 @@ class Puzzle:
                 if square.is_black:
                     continue
                     
-                has_empty_square_above = (r == 0 or self.grid[r - 1][c].is_black)
-                has_empty_square_on_left = (c == 0 or self.grid[r][c - 1].is_black)
+                has_black_square_above = (r == 0 or self.grid[r - 1][c].is_black)
+                has_black_square_on_left = (c == 0 or self.grid[r][c - 1].is_black)
                 # this represents the start of a new word; give it an index
-                if has_empty_square_above or has_empty_square_on_left:
+                if has_black_square_above or has_black_square_on_left:
                     square.index = self.get_next_index()
 
                 # specify what kinds of words this square will start
-                square.starts_down_word = has_empty_square_above
-                square.starts_across_word = has_empty_square_on_left
+                square.starts_down_word = has_black_square_above
+                square.starts_across_word = has_black_square_on_left
 
     def _generate_entries_from_numbered_squares(self) -> Dict[str, Entry]:
         entries = {}
@@ -69,10 +69,17 @@ class Puzzle:
                         squares_for_entry.append(self.grid[r][c+i])
                         i += 1
 
-                    entry = Entry(square.index, Direction.ACROSS, r, c, i)
+                    entry = Entry(
+                        square.index,
+                        Direction.ACROSS,
+                        r,
+                        c,
+                        i,
+                        squares=squares_for_entry,
+                    )
                     entries[entry.index_str()] = entry
                     for square_for_entry in squares_for_entry:
-                        square_for_entry.across_entry_parent = entry
+                        square_for_entry.across_entry_parent = entry.index_str()
 
                 if square.starts_down_word:
                     i = 0
@@ -81,10 +88,17 @@ class Puzzle:
                         squares_for_entry.append(self.grid[r+i][c])
                         i += 1
 
-                    entry = Entry(square.index, Direction.DOWN, r, c, i)
+                    entry = Entry(
+                        square.index,
+                        Direction.DOWN,
+                        r,
+                        c,
+                        i,
+                        squares=squares_for_entry
+                    )
                     entries[entry.index_str()] = entry
                     for square_for_entry in squares_for_entry:
-                        square_for_entry.down_entry_parent = entry
+                        square_for_entry.down_entry_parent = entry.index_str()
 
         return entries
 
@@ -119,23 +133,24 @@ class Puzzle:
         entries_list.sort(key=entry_sort_by_fn, reverse=True)
         return entries_list
 
-    # returns a list of the affected squares
-    def fill_entry(self, entry: Entry, answer: str) -> List[Square]:
-        assert len(answer) == entry.answer_length, \
-            f"Answer {answer} has length {len(answer)}, but entry " \
+    # Fills an entry of the puzzle with a provided guess.
+    # Returns a list of the affected squares.
+    def fill_entry(self, entry: Entry, guess: str) -> List[Square]:
+        assert len(guess) == entry.answer_length, \
+            f"Answer {guess} has length {len(guess)}, but entry " \
             f"{entry.index_str()} has length {entry.answer_length}"
 
         newly_affected_squares = []
         r = entry.row_in_grid
         c = entry.col_in_grid
         if entry.direction == Direction.DOWN:
-            for i, letter in enumerate(answer):
+            for i, letter in enumerate(guess):
                 square = self.grid[r + i][c]
                 if square.letter != letter:
                     square.letter = letter
                     newly_affected_squares.append(square)
         else:
-            for i, letter in enumerate(answer):
+            for i, letter in enumerate(guess):
                 square = self.grid[r][c+i]
                 if square.letter != letter:
                     square.letter = letter
@@ -143,9 +158,14 @@ class Puzzle:
 
         return newly_affected_squares
 
+    # Idempotently erases a letter from a list of Squares.
     def erase_squares(self, squares: List[Square]) -> None:
         for square in squares:
             square.letter = None
+
+    """
+    Functions to import/export/print the puzzle. 
+    """
 
     def export_as_ascii(self, outfile: str):
         puzzle_ascii = ""

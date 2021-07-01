@@ -1,6 +1,14 @@
 """File containing string utils for puzzle rendering."""
 
 
+# Example:
+#  string1: abc       string2:  jk
+#           def                 lm
+#           ghi                 no
+#
+# merged_string: abcjk
+#                deflm
+#                ghino
 def merge_strings_with_same_num_lines(str1: str, str2: str) -> str:
     str1_lines = str1.splitlines()
     str2_lines = str2.splitlines()

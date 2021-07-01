@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple, List
 
+from square import Square
+
 
 class Direction(Enum):
     ACROSS = 'A'
@@ -18,6 +20,7 @@ class Entry:
     answer_length: int
     clue: Optional[str] = None
     answer: Optional[str] = None
+    squares: List[Square] = None
 
     # returns True if the current entry shares any squares
     # with the passed-in Entry, false otherwise.
@@ -27,6 +30,12 @@ class Entry:
         if len(common_squares) == 0:
             print(f"{entry.index_str()} does not intersect with {self.index_str()}")
         return len(common_squares) > 0
+
+    def get_current_fill(self) -> str:
+        current_fill = ""
+        for sq in self.squares:
+            current_fill += sq.letter if sq.letter is not None else "_"
+        return current_fill
 
     def _get_square_indices(self) -> List[Tuple[int, int]]:
         r = self.row_in_grid
