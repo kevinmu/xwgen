@@ -120,20 +120,22 @@ class Puzzle:
         entries_list.sort(key=entry_sort_by_fn, reverse=True)
         return entries_list
 
-    def get_entries_sorted_by_num_possible_matches_asc(
+    # filters out entries with a fill priority score of 0
+    def get_entries_sorted_by_fill_priority_desc(
         self,
         word_filler: WordFiller,
     ) -> List[Entry]:
         entries_list = []
         for entry in self.entries.values():
-            entries_list.append(entry)
+            if entry.get_fill_priority(word_filler) > 0:
+                entries_list.append(entry)
 
         # Heuristic #2: fill in words with fewer possibilities first
         #               because they are harder to fill.
         def entry_sort_by_fn(e: Entry) -> int:
-            return e.get_num_possible_matches(word_filler)
+            return e.get_fill_priority(word_filler)
 
-        entries_list.sort(key=entry_sort_by_fn)
+        entries_list.sort(key=entry_sort_by_fn, reverse=True)
         return entries_list
 
     def get_entries_sorted_by_index_str_asc(self) -> List[Entry]:
@@ -178,6 +180,15 @@ class Puzzle:
     def erase_squares(self, squares: List[Square]) -> None:
         for square in squares:
             square.letter = None
+
+    # Returns a list of invalid entries
+    def validate_puzzle(self, word_filler: WordFiller) -> List[Entry]:
+        invalid_entries = []
+        for entry in self.entries.values():
+            hint = entry.get_current_hint()
+            if not word_filler.contains_word(hint):
+                invalid_entries.append(entry)
+        return invalid_entries
 
     """
     Functions to import/export/print the puzzle. 
