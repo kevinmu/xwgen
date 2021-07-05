@@ -166,7 +166,6 @@ class Puzzle:
             f"Answer {answer} has length {len(answer)}, but entry " \
             f"{entry.index_str()} has length {entry.answer_length}"
 
-        entry.answer = answer
         entry.clue = "Clue for " + answer
 
         newly_affected_squares = []
@@ -230,6 +229,9 @@ class Puzzle:
 
             f.write(puzzle_ascii)
 
+            for entry in self.entries.values():
+                f.write(entry.clue_str() + "\n")
+
     @staticmethod
     def import_from_ascii(infile: str) -> 'Puzzle':
         with open(infile, "r") as f:
@@ -253,6 +255,12 @@ class Puzzle:
                     puzzle.grid[r][c].letter = letter
 
         puzzle.initialize()
+
+        # read in clues
+        for clue_str in lines[6+cols:]:
+            index_str = Entry.index_from_clue_str(clue_str)
+            puzzle.entries[index_str].unmarshal_clue_str(clue_str)
+
         return puzzle
 
     def render(self):
@@ -277,7 +285,7 @@ class Puzzle:
 
         print()
         for entry in self.entries.values():
-            entry.render_clue()
+            print(entry.clue_str())
 
     # Code adapted from https://github.com/svisser/crossword.
     # The original code was missing logic to populate the fill.
@@ -316,11 +324,11 @@ class Puzzle:
 
         for entry in self.entries.values():
             if entry.direction == Direction.ACROSS:
-                clues[entry.index].append(f"CLUE FOR {entry.index_str()}")
+                clues[entry.index].append(entry.clue)
 
         for entry in self.entries.values():
             if entry.direction == Direction.DOWN:
-                clues[entry.index].append(f"CLUE FOR {entry.index_str()}")
+                clues[entry.index].append(entry.clue)
 
         for _, clues in sorted(clues.items()):
             for clue in clues:

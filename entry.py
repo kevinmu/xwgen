@@ -20,7 +20,6 @@ class Entry:
     col_in_grid: int
     answer_length: int
     clue: Optional[str] = None
-    answer: Optional[str] = None
     squares: List[Square] = None
     cached_num_matches: Dict[str, int] = field(default_factory=dict)
 
@@ -87,8 +86,22 @@ class Entry:
     def index_str(self) -> str:
         return f"{self.index}{self.direction.value}"
 
-    def render_clue(self) -> None:
-        print(f"{self.index_str()}: {self.clue} ({self.answer_length})")
+    def clue_str(self) -> str:
+        return f"{self.index_str()}: {self.clue} ({self.get_current_hint()})"
+
+    def unmarshal_clue_str(self, clue_str: str) -> None:
+        components1 = clue_str.split(":", 1)
+        clue_str_without_index = components1[1]
+
+        components2 = clue_str_without_index.split("(")
+        clue_only = "(".join(components2[:-1]).strip()
+
+        self.clue = clue_only
+
+    @staticmethod
+    def index_from_clue_str(clue_str: str) -> str:
+        components = clue_str.split(":", 1)
+        return components[0]
 
     def __hash__(self) -> int:
         return hash(self.index_str())
