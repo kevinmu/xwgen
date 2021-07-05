@@ -83,16 +83,19 @@ class PuzzleFiller:
         return next_answer_to_try, newly_affected_squares
 
     def fill_puzzle_using_heuristic(self, puzzle: Puzzle) -> Tuple[int, int]:
-        entries_list = puzzle.get_entries_sorted_by_length_desc()
         failed_words_count = 0
         success_words_count = 0
-
-        for entry in entries_list:
+        entries_list = puzzle.get_entries_sorted_by_fill_priority_desc(self.word_filler)
+        while len(entries_list) > 0:
+            entry = entries_list[0]
             res, _ = self.fill_entry_in_puzzle_using_heuristic(puzzle, entry, 0)
             if res == "":
                 failed_words_count += 1
             else:
                 success_words_count += 1
+
+            entries_list = puzzle.get_entries_sorted_by_fill_priority_desc(self.word_filler)
+            print("LENGTH OF ENTRIES LIST:", len(entries_list))
         return success_words_count, failed_words_count
 
     def fill_entry_in_puzzle_using_heuristic(
@@ -148,12 +151,6 @@ class PuzzleFiller:
             return "", []
 
         fill_score = answers_with_scores_and_affected_squares[best_answer][0]
-        if fill_score == 0:
-            print(
-                f"NO ANSWER for {entry.index_str()} - fill score of {fill_score}",
-            )
-            return "", []
-
         affected_squares = answers_with_scores_and_affected_squares[best_answer][1]
 
         print(

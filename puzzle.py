@@ -1,4 +1,5 @@
 """Class representing the crossword grid."""
+import collections
 from typing import List, Tuple, Dict
 
 from entry import Entry, Direction
@@ -7,7 +8,14 @@ from string_utils import merge_strings_with_same_num_lines
 from string_utils import remove_last_line_from_string
 from word_filler import WordFiller
 
+import puz
+
+
 class Puzzle:
+    author: str
+    title: str
+    copyright: str
+    note: str
     rows: int
     cols: int
     grid: List[List[Square]]
@@ -120,20 +128,22 @@ class Puzzle:
         entries_list.sort(key=entry_sort_by_fn, reverse=True)
         return entries_list
 
-    def get_entries_sorted_by_num_possible_matches_asc(
+    # filters out entries with a fill priority score of 0
+    def get_entries_sorted_by_fill_priority_desc(
         self,
         word_filler: WordFiller,
     ) -> List[Entry]:
         entries_list = []
         for entry in self.entries.values():
-            entries_list.append(entry)
+            if entry.get_fill_priority(word_filler) > 0:
+                entries_list.append(entry)
 
         # Heuristic #2: fill in words with fewer possibilities first
         #               because they are harder to fill.
         def entry_sort_by_fn(e: Entry) -> int:
-            return e.get_num_possible_matches(word_filler)
+            return e.get_fill_priority(word_filler)
 
-        entries_list.sort(key=entry_sort_by_fn)
+        entries_list.sort(key=entry_sort_by_fn, reverse=True)
         return entries_list
 
     def get_entries_sorted_by_index_str_asc(self) -> List[Entry]:
@@ -151,22 +161,25 @@ class Puzzle:
 
     # Fills an entry of the puzzle with a provided guess.
     # Returns a list of the affected squares.
-    def fill_entry(self, entry: Entry, guess: str) -> List[Square]:
-        assert len(guess) == entry.answer_length, \
-            f"Answer {guess} has length {len(guess)}, but entry " \
+    def fill_entry(self, entry: Entry, answer: str) -> List[Square]:
+        assert len(answer) == entry.answer_length, \
+            f"Answer {answer} has length {len(answer)}, but entry " \
             f"{entry.index_str()} has length {entry.answer_length}"
+
+        entry.answer = answer
+        entry.clue = "Clue for " + answer
 
         newly_affected_squares = []
         r = entry.row_in_grid
         c = entry.col_in_grid
         if entry.direction == Direction.DOWN:
-            for i, letter in enumerate(guess):
+            for i, letter in enumerate(answer):
                 square = self.grid[r + i][c]
                 if square.letter != letter:
                     square.letter = letter
                     newly_affected_squares.append(square)
         else:
-            for i, letter in enumerate(guess):
+            for i, letter in enumerate(answer):
                 square = self.grid[r][c+i]
                 if square.letter != letter:
                     square.letter = letter
@@ -179,23 +192,42 @@ class Puzzle:
         for square in squares:
             square.letter = None
 
+    # Returns a list of invalid entries
+    def validate_puzzle(self, word_filler: WordFiller) -> List[Entry]:
+        invalid_entries = []
+        for entry in self.entries.values():
+            hint = entry.get_current_hint()
+            if not word_filler.contains_word(hint):
+                invalid_entries.append(entry)
+        return invalid_entries
+
     """
     Functions to import/export/print the puzzle. 
     """
 
     def export_as_ascii(self, outfile: str):
-        puzzle_ascii = ""
-        for r in range(self.rows):
-            for c in range(self.cols):
-                sq = self.grid[r][c]
-                if sq.is_black:
-                    puzzle_ascii += "*"
-                elif sq.letter is None:
-                    puzzle_ascii += "-"
-                else:
-                    puzzle_ascii += sq.letter
-            puzzle_ascii += "\n"
         with open(outfile, "w") as f:
+            f.writelines([
+                str(self.rows) + "\n",
+                str(self.cols) + "\n",
+                self.title + "\n",
+                self.author + "\n",
+                self.copyright + "\n",
+                self.note + "\n",
+            ])
+
+            puzzle_ascii = ""
+            for r in range(self.rows):
+                for c in range(self.cols):
+                    sq = self.grid[r][c]
+                    if sq.is_black:
+                        puzzle_ascii += "*"
+                    elif sq.letter is None:
+                        puzzle_ascii += "-"
+                    else:
+                        puzzle_ascii += sq.letter
+                puzzle_ascii += "\n"
+
             f.write(puzzle_ascii)
 
     @staticmethod
@@ -204,10 +236,16 @@ class Puzzle:
             puzzle_ascii = f.read()
 
         lines = puzzle_ascii.splitlines()
-        rows = len(lines)
-        cols = len(lines[0])
+        rows = int(lines[0])
+        cols = int(lines[1])
         puzzle = Puzzle(rows=rows, cols=cols)
-        for r, line in enumerate(lines):
+
+        puzzle.title = lines[2]
+        puzzle.author = lines[3]
+        puzzle.copyright = lines[4]
+        puzzle.note = lines[5]
+
+        for r, line in enumerate(lines[6:6+cols]):
             for c, letter in enumerate(line):
                 if letter == "*":
                     puzzle.mark_black_square((r, c))
@@ -240,3 +278,55 @@ class Puzzle:
         print()
         for entry in self.entries.values():
             entry.render_clue()
+
+    # Code adapted from https://github.com/svisser/crossword.
+    # The original code was missing logic to populate the fill.
+    def to_puz_puzzle(self) -> puz.Puzzle:
+        result = puz.Puzzle()
+        result.width = self.cols
+        result.height = self.rows
+        result.author = 'Kevin Mu'
+        result.copyright = '2021 Kevin Mu Crosswords'
+        result.title = 'Stepping Stones'
+        result.notes = "This is a special test puzzle."
+
+        solution_cells = []
+        fill_cells = []
+        for row in self.grid:
+            for cell in row:
+                solution_value = None
+                fill_value = None
+                if cell.is_black:
+                    solution_value = '.'
+                    fill_value = '.'
+                elif cell.letter is None:
+                    solution_value = '-'
+                    fill_value = '-'
+                else:
+                    solution_value = cell.letter
+                    fill_value = cell.letter
+
+                solution_cells.append(solution_value)
+                fill_cells.append(fill_value)
+        result.solution = ''.join(solution_cells)
+        result.fill = ''.join(fill_cells)
+
+        result.clues = []
+        clues = collections.defaultdict(list)
+
+        for entry in self.entries.values():
+            if entry.direction == Direction.ACROSS:
+                clues[entry.index].append(f"CLUE FOR {entry.index_str()}")
+
+        for entry in self.entries.values():
+            if entry.direction == Direction.DOWN:
+                clues[entry.index].append(f"CLUE FOR {entry.index_str()}")
+
+        for _, clues in sorted(clues.items()):
+            for clue in clues:
+                result.clues.append(clue)
+
+        return result
+
+    def write_to_puz_file(self, filename):
+        self.to_puz_puzzle().save(filename)

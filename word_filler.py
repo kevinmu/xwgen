@@ -1,12 +1,13 @@
 """Util class containing logic to fill words."""
 import random
 import re
-from typing import Dict, List
+from typing import Dict, List, Set
 
 
 class WordFiller:
     words_file: str
     words_by_length: Dict[int, List[str]]
+    words_set: Set[str]
 
     def __init__(self, words_file: str = "wordlist.txt"):
         self.words_file = words_file
@@ -18,11 +19,14 @@ class WordFiller:
         
         # populate self.words_by_length
         self.words_by_length = {}
+        self.words_set = set()
+
         for word in words_list:
             # represents a comment
             if word.startswith("#"):
                 continue
             self.words_by_length.setdefault(len(word), list()).append(word)
+            self.words_set.add(word)
 
         for k in self.words_by_length:
             random.shuffle(self.words_by_length[k])
@@ -40,3 +44,8 @@ class WordFiller:
                 if num_matches >= 2000:
                     break
         return matches
+
+    def contains_word(self, word: str) -> bool:
+        if word in self.words_set:
+            print(f"FOUND {word} in set!")
+        return word in self.words_set

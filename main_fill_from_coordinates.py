@@ -30,12 +30,18 @@ def main():
     puzzle.render()
 
     puzzle_filler = PuzzleFiller()
-    success_words_count, failed_words_count = puzzle_filler.fill_puzzle_using_heuristic(puzzle)
+    puzzle_filler.fill_puzzle_using_heuristic(puzzle)
     #puzzle_filler.fill_puzzle_using_backtracking(puzzle)
 
+
+    failed_entries = puzzle.validate_puzzle(puzzle_filler.word_filler)
+    print("NUMBER OF FAILED ENTRIES: ", len(failed_entries))
+    for entry in failed_entries:
+        print(entry.index_str(), entry.get_current_hint())
+
     puzzle.render()
-    print(f"Succeeded: {success_words_count}, Failed: {failed_words_count}")
     puzzle.export_as_ascii("puzz1.out")
+
 
 if __name__ == "__main__":
     main()
