@@ -25,6 +25,7 @@ class Puzzle:
     def __init__(self, rows: int, cols: int):
         self.rows = rows
         self.cols = cols
+        self.author = self.title = self.copyright = self.note = ""
 
         self.grid = [[Square() for _ in range(cols)] for _ in range(rows)]
         self.index = 0
@@ -293,10 +294,10 @@ class Puzzle:
         result = puz.Puzzle()
         result.width = self.cols
         result.height = self.rows
-        result.author = 'Kevin Mu'
-        result.copyright = '2021 Kevin Mu Crosswords'
-        result.title = 'Stepping Stones'
-        result.notes = "This is a special test puzzle."
+        result.author = self.author
+        result.copyright = self.copyright
+        result.title = self.title
+        result.notes = self.note
 
         solution_cells = []
         fill_cells = []

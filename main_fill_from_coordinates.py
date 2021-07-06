@@ -5,6 +5,9 @@ from puzzle_filler import PuzzleFiller
 
 def main():
     puzzle = Puzzle(15, 15)
+    puzzle.title = "Test Puzzle #1"
+    puzzle.author = "Kevin Mu"
+
     '''puzzle.mark_black_squares([
         (0, 8),
         (1, 8),
