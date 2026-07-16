@@ -53,6 +53,30 @@ options.
 Imported placeholder clues such as `Clue for OLDANSWER` are refreshed when the
 solver chooses a different answer. Non-placeholder clue text is preserved.
 
+## Constructor UI
+
+The browser-based constructor provides an editable and numbered crossword grid,
+180-degree block symmetry, seed-entry locks, undo/redo, live dictionary
+candidates, CSP fill controls, clue editing, ASCII import/export, and `.puz`
+export.
+
+Install the web dependencies once:
+
+```powershell
+cd web
+npm install
+cd ..
+```
+
+Then start the editor and fill engine together:
+
+```powershell
+.\run_web.ps1
+```
+
+The constructor opens at `http://localhost:3000`. Keep the PowerShell window
+open while using it; press `Ctrl+C` there to stop both services.
+
 ## Python API
 
 ```python
