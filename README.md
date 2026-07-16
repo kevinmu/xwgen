@@ -26,6 +26,19 @@ Fill the included partially completed puzzle:
 python fill.py puzz1.out --output filled.out
 ```
 
+Render a boxed crossword grid directly in the terminal:
+
+```powershell
+python fill.py puzz1.out --render
+```
+
+Or create a standard `.puz` file that can be opened by a compatible crossword
+application:
+
+```powershell
+python fill.py puzz1.out --output filled.out --puz-output filled.puz
+```
+
 Generate and fill the hard-coded sample layout:
 
 ```powershell
@@ -36,6 +49,9 @@ The command exits with status 0 for a solution, 1 when the grid is proven
 unsatisfiable, and 2 when the configured search budget is exhausted. Run
 `python fill.py --help` for timeout, restart, seed, rendering, and dictionary
 options.
+
+Imported placeholder clues such as `Clue for OLDANSWER` are refreshed when the
+solver chooses a different answer. Non-placeholder clue text is preserved.
 
 ## Python API
 

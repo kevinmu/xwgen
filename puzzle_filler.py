@@ -480,7 +480,7 @@ class PuzzleFiller:
             entry = self._entries[slot]
             for square, letter in zip(entry.squares, word):
                 square.letter = letter
-            if entry.clue is None:
+            if entry.clue is None or entry.clue.startswith("Clue for "):
                 entry.clue = "Clue for " + word
 
     def _result(

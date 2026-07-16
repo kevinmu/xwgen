@@ -31,6 +31,7 @@ class PuzzleFillerTest(TestCase):
         puzzle = Puzzle(3, 3)
         puzzle.initialize()
         puzzle.entries["1A"].clue = "Preserved clue"
+        puzzle.entries["1D"].clue = "Clue for OLD"
         filler = self.make_filler(["ABC", "DEF", "GHI", "ADG", "BEH", "CFI"])
 
         result = filler.fill_puzzle(puzzle)
@@ -38,6 +39,7 @@ class PuzzleFillerTest(TestCase):
         self.assertEqual(FillStatus.SOLVED, result.status)
         self.assertEqual(6, len(result.assignments))
         self.assertEqual("Preserved clue", puzzle.entries["1A"].clue)
+        self.assertEqual("Clue for ADG", puzzle.entries["1D"].clue)
         self.assertEqual([], puzzle.validate_puzzle(filler.word_filler))
         self.assertEqual(6, len(set(result.assignments.values())))
 

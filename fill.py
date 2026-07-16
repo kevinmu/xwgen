@@ -18,6 +18,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", type=Path, help="write the solved ASCII puzzle here"
     )
     parser.add_argument(
+        "--puz-output",
+        type=Path,
+        help="write a standard .puz file for crossword applications",
+    )
+    parser.add_argument(
         "--wordlist", type=Path, help="plain-text word list (default: wordlist.txt)"
     )
     parser.add_argument(
@@ -73,6 +78,9 @@ def main() -> int:
         if args.output is not None:
             puzzle.export_as_ascii(str(args.output))
             print(f"wrote {args.output}")
+        if args.puz_output is not None:
+            puzzle.write_to_puz_file(str(args.puz_output))
+            print(f"wrote {args.puz_output}")
         if args.render:
             puzzle.render()
         return 0
