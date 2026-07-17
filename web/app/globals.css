@@ -40,7 +40,7 @@ html::-webkit-scrollbar,
 body::-webkit-scrollbar,
 .left-rail::-webkit-scrollbar,
 .candidate-list::-webkit-scrollbar,
-.clue-column ol::-webkit-scrollbar { width: 6px; height: 6px; }
+.clue-column ol::-webkit-scrollbar { width: 4px; height: 4px; }
 html::-webkit-scrollbar-track,
 body::-webkit-scrollbar-track,
 .left-rail::-webkit-scrollbar-track,
@@ -475,7 +475,7 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
 .clue-columns { min-height: 0; display: grid; flex: 1 1 auto; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .clue-column { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 10px 7px 8px; }
 .clue-column + .clue-column { border-left: 1px solid var(--line); }
-.clue-column h3 { margin: 0 4px 6px; font-size: 12px; }
+.clue-column h3 { margin: 0 4px 6px; font-size: 12px; font-weight: 850; }
 .clue-column ol { min-height: 0; display: grid; align-content: start; gap: 1px; margin: 0; padding: 4px 4px 0 0; overflow-y: auto; border-top: 1px solid var(--line); list-style: none; }
 .clue-column button {
   width: 100%;
