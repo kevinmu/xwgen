@@ -732,95 +732,103 @@ export default function Home() {
       <div className="workspace">
         <aside className="left-rail" aria-label="Puzzle setup">
           <section className="left-panel-section puzzle-fields">
-            <p className="eyebrow">Puzzle details</p>
-            <label>
-              <span>Title</span>
-              <input
-                value={metadata.title}
-                onChange={(event) => setMetadata((current) => ({ ...current, title: event.target.value }))}
-                aria-label="Puzzle title"
-              />
-            </label>
-            <label>
-              <span>Constructor</span>
-              <input
-                value={metadata.author}
-                placeholder="Your name"
-                onChange={(event) => setMetadata((current) => ({ ...current, author: event.target.value }))}
-                aria-label="Puzzle constructor"
-              />
-            </label>
+            <div className="left-section-header"><p className="eyebrow">Puzzle details</p></div>
+            <div className="left-section-body">
+              <label>
+                <span>Title</span>
+                <input
+                  value={metadata.title}
+                  onChange={(event) => setMetadata((current) => ({ ...current, title: event.target.value }))}
+                  aria-label="Puzzle title"
+                />
+              </label>
+              <label>
+                <span>Constructor</span>
+                <input
+                  value={metadata.author}
+                  placeholder="Your name"
+                  onChange={(event) => setMetadata((current) => ({ ...current, author: event.target.value }))}
+                  aria-label="Puzzle constructor"
+                />
+              </label>
+            </div>
           </section>
 
           <section className="left-panel-section edit-controls">
-            <div className="left-section-heading">
+            <div className="left-section-header">
               <p className="eyebrow">Grid tools</p>
               <div className="history-actions">
                 <button type="button" onClick={undo} disabled={!past.length} aria-label="Undo" title="Undo">↶</button>
                 <button type="button" onClick={redo} disabled={!future.length} aria-label="Redo" title="Redo">↷</button>
               </div>
             </div>
-            <p className="control-note">Enter letters or draw black squares.</p>
-            <div className="segmented-control" aria-label="Grid editing tool">
-              <button className={tool === "type" ? "active" : ""} type="button" onClick={() => setTool("type")}>Type</button>
-              <button className={tool === "block" ? "active" : ""} type="button" onClick={() => setTool("block")}>Blocks</button>
+            <div className="left-section-body">
+              <p className="control-note">Enter letters or draw black squares.</p>
+              <div className="segmented-control" aria-label="Grid editing tool">
+                <button className={tool === "type" ? "active" : ""} type="button" onClick={() => setTool("type")}>Type</button>
+                <button className={tool === "block" ? "active" : ""} type="button" onClick={() => setTool("block")}>Blocks</button>
+              </div>
+              <label className="switch-label">
+                <input type="checkbox" checked={symmetry} onChange={(event) => setSymmetry(event.target.checked)} />
+                <span className="switch" aria-hidden="true" />
+                180° rotational symmetry
+              </label>
             </div>
-            <label className="switch-label">
-              <input type="checkbox" checked={symmetry} onChange={(event) => setSymmetry(event.target.checked)} />
-              <span className="switch" aria-hidden="true" />
-              180° rotational symmetry
-            </label>
           </section>
 
           <section className="left-panel-section block-layout-controls">
-            <p className="eyebrow">Automatic layout</p>
-            <p className="control-note">Build a connected, symmetric grid with 3+ letter entries.</p>
-            <label className="select-control">
-              <span>Block density</span>
-              <select
-                value={layoutProfile}
-                onChange={(event) => setLayoutProfile(event.target.value as LayoutProfile)}
-                disabled={layoutBusy || busy}
+            <div className="left-section-header"><p className="eyebrow">Automatic layout</p></div>
+            <div className="left-section-body">
+              <p className="control-note">Build a connected, symmetric grid with 3+ letter entries.</p>
+              <label className="select-control">
+                <span>Block density</span>
+                <select
+                  value={layoutProfile}
+                  onChange={(event) => setLayoutProfile(event.target.value as LayoutProfile)}
+                  disabled={layoutBusy || busy}
+                >
+                  <option value="airy">Airy · ~12%</option>
+                  <option value="classic">Classic · ~15%</option>
+                  <option value="dense">Dense · ~17%</option>
+                </select>
+              </label>
+              <button
+                className="generate-layout-button"
+                type="button"
+                onClick={generateBlockLayout}
+                disabled={engine !== "ready" || layoutBusy || busy}
               >
-                <option value="airy">Airy · ~12%</option>
-                <option value="classic">Classic · ~15%</option>
-                <option value="dense">Dense · ~17%</option>
-              </select>
-            </label>
-            <button
-              className="generate-layout-button"
-              type="button"
-              onClick={generateBlockLayout}
-              disabled={engine !== "ready" || layoutBusy || busy}
-            >
-              {layoutBusy ? "Generating…" : "Generate new layout"}
-            </button>
+                {layoutBusy ? "Generating…" : "Generate new layout"}
+              </button>
+            </div>
           </section>
 
           <section className="left-panel-section fill-controls">
-            <p className="eyebrow">Fill quality</p>
-            <label className="select-control">
-              <span>Dictionary policy</span>
-              <select
-                value={qualityMode}
-                onChange={(event) => setQualityMode(event.target.value as QualityMode)}
-                disabled={busy}
-              >
-                <option value="balanced">50+ then relax</option>
-                <option value="strict">Strict 50+</option>
-                <option value="open">All words</option>
-              </select>
-            </label>
-            <p className="control-note quality-note">
-              {qualityMode === "balanced"
-                ? "Start at 50+, then widen only when the grid needs it."
-                : qualityMode === "strict"
-                  ? "Use only replaceable entries scored 50 or higher."
-                  : "Allow the full word list immediately."}
-            </p>
-            <div className="cell-state-key" aria-label="Cell color key">
-              <span><i className="provisional" aria-hidden="true" />In progress</span>
-              <span><i className="locked" aria-hidden="true" />Locked</span>
+            <div className="left-section-header"><p className="eyebrow">Fill quality</p></div>
+            <div className="left-section-body">
+              <label className="select-control">
+                <span>Dictionary policy</span>
+                <select
+                  value={qualityMode}
+                  onChange={(event) => setQualityMode(event.target.value as QualityMode)}
+                  disabled={busy}
+                >
+                  <option value="balanced">50+ then relax</option>
+                  <option value="strict">Strict 50+</option>
+                  <option value="open">All words</option>
+                </select>
+              </label>
+              <p className="control-note quality-note">
+                {qualityMode === "balanced"
+                  ? "Start at 50+, then widen only when the grid needs it."
+                  : qualityMode === "strict"
+                    ? "Use only replaceable entries scored 50 or higher."
+                    : "Allow the full word list immediately."}
+              </p>
+              <div className="cell-state-key" aria-label="Cell color key">
+                <span><i className="provisional" aria-hidden="true" />In progress</span>
+                <span><i className="locked" aria-hidden="true" />Locked</span>
+              </div>
             </div>
           </section>
 

@@ -26,6 +26,7 @@ test("server-renders the XWGen constructor", async () => {
   assert.match(html, /header-fill-button[\s\S]*Fill grid[\s\S]*New grid/);
   assert.match(html, /Generate new layout/);
   assert.match(html, /Puzzle setup/);
+  assert.match(html, /left-section-header/);
   assert.match(html, /Block density/);
   assert.match(html, /Puzzle clues/);
   assert.match(html, /Across/);
@@ -33,6 +34,7 @@ test("server-renders the XWGen constructor", async () => {
   assert.match(html, /missing/);
   assert.match(html, /Clue needed/);
   assert.match(html, /Candidate fill/);
+  assert.match(html, /entry-lock-icon unlocked/);
   assert.match(html, /Score/);
   assert.match(html, /50\+ then relax/);
   assert.match(html, /Start at 50\+, then widen only when the grid needs it/);

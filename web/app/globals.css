@@ -51,7 +51,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
   border-bottom: 1px solid var(--line);
 }
 
-.brand-block, .document-actions, .export-group, .history-actions, .left-section-heading {
+.brand-block, .document-actions, .export-group, .history-actions, .left-section-header {
   display: flex;
   align-items: center;
 }
@@ -138,25 +138,21 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
   background: var(--panel);
   box-shadow: var(--shadow);
 }
-.left-panel-section { padding: 14px; border-bottom: 1px solid var(--line); background: white; }
-.left-panel-section > .eyebrow,
-.left-section-heading .eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 7px;
+.left-panel-section { padding: 0; border-bottom: 1px solid var(--line); background: white; }
+.left-section-header {
+  min-height: 34px;
+  justify-content: space-between;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--line);
+  background: #eef1f5;
+}
+.left-section-header .eyebrow {
+  margin: 0;
   color: #343943;
   font-size: 9px;
   letter-spacing: 0.11em;
 }
-.left-panel-section > .eyebrow::before,
-.left-section-heading .eyebrow::before {
-  content: "";
-  width: 3px;
-  height: 12px;
-  border-radius: 2px;
-  background: var(--blue);
-}
-.left-panel-section > .eyebrow { margin-bottom: 10px; }
+.left-section-body { padding: 12px 14px 14px; }
 .left-panel-section label { display: grid; gap: 5px; }
 .left-panel-section label + label { margin-top: 11px; }
 .left-panel-section label > span {
@@ -182,8 +178,6 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
 .left-panel-section input:focus,
 .left-panel-section select:focus { border-color: var(--blue); background: white; }
 .puzzle-fields input { font-family: Georgia, "Times New Roman", serif; font-size: 14px; }
-.left-section-heading { justify-content: space-between; margin-bottom: 9px; }
-.left-section-heading .eyebrow { margin: 0; }
 .control-note { margin: -3px 0 10px; color: var(--muted); font-size: 9px; line-height: 1.45; }
 .quality-note { margin: 8px 0 0; }
 .cell-state-key {
@@ -393,8 +387,9 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
   border-radius: 4px;
   background: var(--ink);
 }
+.entry-lock-icon.unlocked { border-color: #d6bd57; background: var(--provisional-cell); }
 .entry-lock-icon.unlocked > span::before { transform: translateX(4px) rotate(24deg); }
-.entry-lock-icon.locked { border-color: #6d84cc; background: #eef2ff; }
+.entry-lock-icon.locked { border-color: #97c5a6; background: var(--locked-cell); }
 .compact-clue-field { display: block; padding: 7px 8px; }
 .compact-clue-field input {
   width: 100%;
