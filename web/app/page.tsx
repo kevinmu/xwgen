@@ -707,6 +707,16 @@ export default function Home() {
     };
   })();
 
+  const activeEntryHasLetters = Boolean(
+    activeEntry?.cells.some(([row, col]) => grid[row][col].letter),
+  );
+  const activeEntryIsLocked = Boolean(
+    activeEntryHasLetters &&
+      activeEntry?.cells.every(
+        ([row, col]) => !grid[row][col].letter || grid[row][col].locked,
+      ),
+  );
+
   const activeCellSet = new Set(activeEntry?.cells.map(([r, c]) => `${r}:${c}`) ?? []);
   const selectedCell = `${selected[0]}:${selected[1]}`;
   const lockedCount = grid.flat().filter((cell) => cell.locked).length;
@@ -845,138 +855,143 @@ export default function Home() {
           </div>
         </section>
 
-        <aside className="inspector" aria-label="Entry inspector">
-          <div className="entry-heading">
-            <div>
-              <p className="eyebrow">Selected entry</p>
-              <h2>{activeEntry ? `${activeEntry.number} ${activeEntry.direction === "A" ? "Across" : "Down"}` : "No entry"}</h2>
-            </div>
-            {activeEntry ? <span className="length-badge">{activeEntry.length} letters</span> : null}
-          </div>
-
+        <aside className="right-rail" aria-label="Entry editor and puzzle clues">
           {activeEntry ? (
-            <>
-              <div className="pattern" aria-label={`Pattern ${activeEntry.pattern}`}>
-                {[...activeEntry.pattern].map((letter, index) => (
-                  <span key={`${activeEntry.id}-${index}`} className={letter === "." ? "empty" : ""}>{letter === "." ? "" : letter}</span>
-                ))}
+            <section className="compact-entry-editor" aria-label={`Selected entry ${activeEntry.id}`}>
+              <div className="entry-strip">
+                <strong
+                  className="entry-id"
+                  title={`${activeEntry.number} ${activeEntry.direction === "A" ? "Across" : "Down"}`}
+                >
+                  {activeEntry.id}
+                </strong>
+                <span className="compact-pattern" aria-label={`Pattern ${activeEntry.pattern}`}>
+                  {activeEntry.pattern.replaceAll(".", "·")}
+                </span>
+                <span
+                  className={`compact-score ${selectedWordScore.state}`}
+                  title={`Wordlist score: ${selectedWordScore.value}. ${selectedWordScore.note}`}
+                  aria-label={`Wordlist score ${selectedWordScore.value}`}
+                >
+                  <small>Score</small>
+                  <b>{selectedWordScore.value}</b>
+                </span>
+                <button
+                  className={`entry-lock-icon ${activeEntryIsLocked ? "locked" : "unlocked"}`}
+                  type="button"
+                  onClick={toggleActiveLock}
+                  disabled={!activeEntryHasLetters}
+                  aria-pressed={activeEntryIsLocked}
+                  aria-label={activeEntryIsLocked ? "Unlock filled letters in this entry" : "Lock filled letters in this entry"}
+                  title={activeEntryIsLocked ? "Unlock filled letters" : "Lock filled letters"}
+                >
+                  <span aria-hidden="true" />
+                </button>
               </div>
-              <div className={`selected-word-score ${selectedWordScore.state}`} aria-live="polite">
-                <div>
-                  <span>Wordlist score</span>
-                  <small>{selectedWordScore.note}</small>
-                </div>
-                <strong>{selectedWordScore.value}</strong>
-              </div>
-              <label className="clue-field">
-                <span>Clue</span>
-                <textarea
-                  rows={2}
+
+              <label className="compact-clue-field">
+                <span className="visually-hidden">Clue for {activeEntry.id}</span>
+                <input
                   value={clues[activeEntry.id] ?? ""}
-                  placeholder="Write a clue…"
+                  placeholder={`Clue for ${activeEntry.id}…`}
                   onChange={(event) => setClues((current) => ({ ...current, [activeEntry.id]: event.target.value }))}
                 />
               </label>
-              <button className="entry-lock-button" type="button" onClick={toggleActiveLock}>
-                {activeEntry.cells.some(([r, c]) => grid[r][c].letter && !grid[r][c].locked) ? "Lock this entry" : "Unlock this entry"}
-              </button>
 
-              <div className="candidate-header">
-                <div>
-                  <p className="eyebrow">Dictionary matches</p>
-                  <strong>{candidateLoading ? "Checking…" : candidateData ? `${candidateData.total.toLocaleString()} candidates` : "Unavailable"}</strong>
+              <details className="candidate-drawer">
+                <summary>
+                  <span>Candidate fill</span>
+                  <strong>
+                    {candidateLoading
+                      ? "Checking…"
+                      : activeCandidateData
+                        ? activeCandidateData.total.toLocaleString()
+                        : "Unavailable"}
+                  </strong>
+                  <small>{activeCandidateData?.lexicon.source ?? lexicon?.source ?? "Dictionary"}</small>
+                </summary>
+                <div className="candidate-list" aria-live="polite">
+                  {activeCandidateData?.candidates.map((candidate, index) => (
+                    <button
+                      type="button"
+                      key={candidate.word}
+                      onClick={() => applyCandidate(candidate.word)}
+                    >
+                      <span>{candidate.word}</span>
+                      <span className="candidate-meta">
+                        <small>{String(index + 1).padStart(2, "0")}</small>
+                        {activeCandidateData.lexicon.scored ? (
+                          <b title="Word quality score">{candidate.score}</b>
+                        ) : null}
+                      </span>
+                    </button>
+                  ))}
+                  {!candidateLoading && activeCandidateData?.candidates.length === 0 ? (
+                    <p className="empty-state">No words match the locked letters in this entry.</p>
+                  ) : null}
+                  {engine === "offline" ? (
+                    <p className="empty-state">Start the local fill engine to inspect candidates.</p>
+                  ) : null}
                 </div>
-                <div className="candidate-source">
-                  <span>locked letters only</span>
-                  <b>{candidateData?.lexicon.source ?? lexicon?.source ?? "Dictionary"}</b>
-                </div>
-              </div>
-              <div className="candidate-list" aria-live="polite">
-                {candidateData?.candidates.map((candidate, index) => (
-                  <button
-                    type="button"
-                    key={candidate.word}
-                    onClick={() => applyCandidate(candidate.word)}
-                  >
-                    <span>{candidate.word}</span>
-                    <span className="candidate-meta">
-                      <small>{String(index + 1).padStart(2, "0")}</small>
-                      {candidateData.lexicon.scored ? (
-                        <b title="Word quality score">{candidate.score}</b>
-                      ) : null}
-                    </span>
-                  </button>
-                ))}
-                {!candidateLoading && candidateData?.candidates.length === 0 ? (
-                  <p className="empty-state">No words match the locked letters in this entry.</p>
+                {activeCandidateData?.lexicon.source === "Spread the Word(list)" ? (
+                  <p className="lexicon-credit">
+                    Word quality by{" "}
+                    <a href="https://www.spreadthewordlist.com/" target="_blank" rel="noreferrer">
+                      Spread the Word(list)
+                    </a>{" "}
+                    · CC BY-NC-SA 4.0
+                  </p>
                 ) : null}
-                {engine === "offline" ? (
-                  <p className="empty-state">Start the local fill engine to inspect candidates.</p>
-                ) : null}
-              </div>
-              {candidateData?.lexicon.source === "Spread the Word(list)" ? (
-                <p className="lexicon-credit">
-                  Word quality by{" "}
-                  <a href="https://www.spreadthewordlist.com/" target="_blank" rel="noreferrer">
-                    Spread the Word(list)
-                  </a>{" "}
-                  · CC BY-NC-SA 4.0
-                </p>
-              ) : null}
-            </>
+              </details>
+            </section>
           ) : (
             <p className="empty-state">Select a white square to inspect its entry.</p>
           )}
+
+          <section className="clue-panel" aria-labelledby="puzzle-clues-heading">
+            <div className="clue-sheet-heading">
+              <h2 id="puzzle-clues-heading">Puzzle clues</h2>
+              <span className={missingClueCount ? "clue-progress incomplete" : "clue-progress complete"}>
+                {missingClueCount ? `${missingClueCount} missing` : "Complete"}
+              </span>
+            </div>
+            <div className="clue-columns">
+              {([
+                ["Across", acrossEntries],
+                ["Down", downEntries],
+              ] as const).map(([heading, clueEntries]) => (
+                <section
+                  className="clue-column"
+                  key={heading}
+                  aria-labelledby={`${heading.toLowerCase()}-clues-heading`}
+                >
+                  <h3 id={`${heading.toLowerCase()}-clues-heading`}>{heading}</h3>
+                  <ol>
+                    {clueEntries.map((entry) => {
+                      const clue = clues[entry.id]?.trim();
+                      const isActive = entry.id === activeEntry?.id;
+                      return (
+                        <li key={entry.id}>
+                          <button
+                            type="button"
+                            className={`${isActive ? "active" : ""} ${clue ? "" : "missing"}`}
+                            onClick={() => selectEntry(entry)}
+                            aria-label={`${entry.number} ${heading}: ${clue || "clue needed"}`}
+                          >
+                            <strong>{entry.number}</strong>
+                            <span>{clue || "Clue needed"}</span>
+                            {!clue ? <small>Missing</small> : null}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </section>
+              ))}
+            </div>
+          </section>
         </aside>
       </div>
-
-      <section className="clue-sheet" aria-labelledby="puzzle-clues-heading">
-        <div className="clue-sheet-heading">
-          <div>
-            <p className="eyebrow">Solve view</p>
-            <h2 id="puzzle-clues-heading">Puzzle clues</h2>
-          </div>
-          <span className={missingClueCount ? "clue-progress incomplete" : "clue-progress complete"}>
-            {missingClueCount
-              ? `${missingClueCount} ${missingClueCount === 1 ? "clue" : "clues"} still needed`
-              : "All clues written"}
-          </span>
-        </div>
-        <div className="clue-columns">
-          {([
-            ["Across", acrossEntries],
-            ["Down", downEntries],
-          ] as const).map(([heading, clueEntries]) => (
-            <section
-              className="clue-column"
-              key={heading}
-              aria-labelledby={`${heading.toLowerCase()}-clues-heading`}
-            >
-              <h3 id={`${heading.toLowerCase()}-clues-heading`}>{heading}</h3>
-              <ol>
-                {clueEntries.map((entry) => {
-                  const clue = clues[entry.id]?.trim();
-                  const isActive = entry.id === activeEntry?.id;
-                  return (
-                    <li key={entry.id}>
-                      <button
-                        type="button"
-                        className={`${isActive ? "active" : ""} ${clue ? "" : "missing"}`}
-                        onClick={() => selectEntry(entry)}
-                        aria-label={`${entry.number} ${heading}: ${clue || "clue needed"}`}
-                      >
-                        <strong>{entry.number}</strong>
-                        <span>{clue || "Clue needed"}</span>
-                        {!clue ? <small>Missing</small> : null}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-            </section>
-          ))}
-        </div>
-      </section>
 
       <section className="run-bar" aria-live="polite">
         <div className="run-status">
