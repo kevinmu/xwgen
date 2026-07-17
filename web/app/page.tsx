@@ -62,11 +62,19 @@ type FillStats = {
   elapsedSeconds: number;
 };
 
+type LexiconMetadata = {
+  source: string;
+  scored: boolean;
+  entries: number;
+  license: string;
+};
+
 type CandidateResponse = {
   entryId: string;
   pattern: string;
   total: number;
-  candidates: string[];
+  candidates: Array<{ word: string; score: number }>;
+  lexicon: LexiconMetadata;
 };
 
 const API_BASE =
@@ -209,6 +217,7 @@ export default function Home() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [stats, setStats] = useState<FillStats | null>(null);
   const [candidateData, setCandidateData] = useState<CandidateResponse | null>(null);
+  const [lexicon, setLexicon] = useState<LexiconMetadata | null>(null);
   const [candidateLoading, setCandidateLoading] = useState(false);
   const [past, setPast] = useState<Cell[][][]>([]);
   const [future, setFuture] = useState<Cell[][][]>([]);
@@ -271,13 +280,20 @@ export default function Home() {
       try {
         const health = await fetch(`${API_BASE}/health`);
         if (!health.ok) throw new Error("offline");
+        const healthData = (await health.json()) as {
+          ok: boolean;
+          lexicon: LexiconMetadata;
+        };
         const response = await fetch(`${API_BASE}/sample`);
         if (!response.ok) throw new Error("sample unavailable");
         const sample = (await response.json()) as PuzzlePayload;
         if (cancelled) return;
+        setLexicon(healthData.lexicon);
         setEngine("ready");
         loadPuzzle(sample);
-        setStatus("Sample loaded. Select an entry or press Fill grid.");
+        setStatus(
+          `${healthData.lexicon.source} loaded${healthData.lexicon.scored ? " with quality scores" : " as an unscored fallback"}.`,
+        );
       } catch {
         if (cancelled) return;
         setEngine("offline");
@@ -687,7 +703,13 @@ export default function Home() {
         </label>
         <div className={`engine-state ${engine}`}>
           <span className="state-dot" aria-hidden="true" />
-          {engine === "ready" ? "Fill engine ready" : engine === "checking" ? "Connecting…" : "Editor only"}
+          {engine === "ready"
+            ? lexicon?.scored
+              ? "Scored lexicon ready"
+              : "Unscored fallback"
+            : engine === "checking"
+              ? "Connecting…"
+              : "Editor only"}
         </div>
       </section>
 
@@ -806,12 +828,25 @@ export default function Home() {
                   <p className="eyebrow">Dictionary matches</p>
                   <strong>{candidateLoading ? "Checking…" : candidateData ? `${candidateData.total.toLocaleString()} candidates` : "Unavailable"}</strong>
                 </div>
-                <span>locked letters only</span>
+                <div className="candidate-source">
+                  <span>locked letters only</span>
+                  <b>{candidateData?.lexicon.source ?? lexicon?.source ?? "Dictionary"}</b>
+                </div>
               </div>
               <div className="candidate-list" aria-live="polite">
-                {candidateData?.candidates.map((word, index) => (
-                  <button type="button" key={word} onClick={() => applyCandidate(word)}>
-                    <span>{word}</span><small>{String(index + 1).padStart(2, "0")}</small>
+                {candidateData?.candidates.map((candidate, index) => (
+                  <button
+                    type="button"
+                    key={candidate.word}
+                    onClick={() => applyCandidate(candidate.word)}
+                  >
+                    <span>{candidate.word}</span>
+                    <span className="candidate-meta">
+                      <small>{String(index + 1).padStart(2, "0")}</small>
+                      {candidateData.lexicon.scored ? (
+                        <b title="Word quality score">{candidate.score}</b>
+                      ) : null}
+                    </span>
                   </button>
                 ))}
                 {!candidateLoading && candidateData?.candidates.length === 0 ? (
@@ -821,6 +856,15 @@ export default function Home() {
                   <p className="empty-state">Start the local fill engine to inspect candidates.</p>
                 ) : null}
               </div>
+              {candidateData?.lexicon.source === "Spread the Word(list)" ? (
+                <p className="lexicon-credit">
+                  Word quality by{" "}
+                  <a href="https://www.spreadthewordlist.com/" target="_blank" rel="noreferrer">
+                    Spread the Word(list)
+                  </a>{" "}
+                  · CC BY-NC-SA 4.0
+                </p>
+              ) : null}
             </>
           ) : (
             <p className="empty-state">Select a white square to inspect its entry.</p>

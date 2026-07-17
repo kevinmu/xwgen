@@ -12,6 +12,7 @@ class SampleIntegrationTest(TestCase):
     def test_fills_the_bundled_partial_fifteen_by_fifteen_puzzle(self):
         puzzle = Puzzle.import_from_ascii(str(REPOSITORY_ROOT / "puzz1.out"))
         filler = PuzzleFiller(
+            words_file=REPOSITORY_ROOT / "wordlist.txt",
             config=SolverConfig(
                 timeout_seconds=10,
                 max_nodes_per_restart=20_000,

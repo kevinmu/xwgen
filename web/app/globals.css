@@ -306,12 +306,18 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
 .entry-lock-button { margin: 0 20px 18px; background: transparent; }
 .candidate-header { justify-content: space-between; padding: 15px 20px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #f7f4eb; }
 .candidate-header strong { font-family: Georgia, serif; font-size: 16px; }
-.candidate-header > span { color: var(--muted); font-size: 9px; font-weight: 750; text-transform: uppercase; }
+.candidate-source { display: grid; justify-items: end; gap: 2px; }
+.candidate-source span { color: var(--muted); font-size: 9px; font-weight: 750; text-transform: uppercase; }
+.candidate-source b { max-width: 150px; overflow: hidden; color: var(--ink); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .candidate-list { max-height: min(320px, calc(100vh - 590px)); min-height: 130px; overflow-y: auto; }
 .candidate-list button { width: 100%; display: flex; justify-content: space-between; padding: 10px 20px; border: 0; border-bottom: 1px solid #ebe7dc; background: white; cursor: pointer; text-align: left; }
 .candidate-list button:hover { background: var(--yellow-soft); }
 .candidate-list button span { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; font-weight: 750; letter-spacing: 0.06em; }
+.candidate-meta { display: flex; align-items: center; gap: 9px; }
 .candidate-list button small { color: #a09c91; font-size: 9px; }
+.candidate-meta b { min-width: 25px; padding: 2px 4px; border: 1px solid #d7c75f; background: var(--yellow-soft); font-size: 9px; text-align: center; }
+.lexicon-credit { margin: 0; padding: 9px 20px; border-top: 1px solid var(--line); background: #f7f4eb; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.lexicon-credit a { color: var(--blue); font-weight: 750; }
 .empty-state { margin: 0; padding: 22px 20px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 
 .run-bar {

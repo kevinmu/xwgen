@@ -59,7 +59,8 @@ class WebServerPayloadTest(TestCase):
 
         self.assertEqual("1A", response["entryId"])
         self.assertEqual("THUS", response["pattern"])
-        self.assertIn("THUS", response["candidates"])
+        self.assertIn("THUS", [candidate["word"] for candidate in response["candidates"]])
+        self.assertIn("source", response["lexicon"])
 
     def test_generates_a_blank_standard_layout(self):
         response = layout_response(

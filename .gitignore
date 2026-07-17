@@ -9,6 +9,8 @@ __pycache__/
 .Python
 env/
 .venv/
+data/spreadthewordlist.txt
+data/*.part
 build/
 !web/build/
 !web/build/**

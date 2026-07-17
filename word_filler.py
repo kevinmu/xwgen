@@ -17,6 +17,8 @@ from typing import (
 
 
 ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+BUNDLED_WORDS_FILE = Path(__file__).with_name("wordlist.txt")
+SPREAD_WORDS_FILE = Path(__file__).with_name("data") / "spreadthewordlist.txt"
 
 
 class WordFiller:
@@ -35,21 +37,17 @@ class WordFiller:
         word_scores: Optional[Mapping[str, float]] = None,
         scores_file: Optional[Union[str, Path]] = None,
     ) -> None:
-        default_words_file = Path(__file__).with_name("wordlist.txt")
+        default_words_file = (
+            SPREAD_WORDS_FILE if SPREAD_WORDS_FILE.exists() else BUNDLED_WORDS_FILE
+        )
         self.words_file = (
             Path(words_file) if words_file is not None else default_words_file
         )
 
-        scores: Dict[str, float] = {}
-        if scores_file is not None:
-            scores.update(self._read_scores(Path(scores_file)))
-        if word_scores is not None:
-            scores.update(
-                {word.upper(): float(score) for word, score in word_scores.items()}
-            )
-
         words_by_length: Dict[int, Set[str]] = {}
+        scores: Dict[str, float] = {}
         rejected_count = 0
+        embedded_score_count = 0
         with self.words_file.open(
             "r", encoding="utf-8", errors="replace"
         ) as words_handle:
@@ -57,11 +55,30 @@ class WordFiller:
                 raw_word = raw_line.strip()
                 if not raw_word or raw_word.startswith("#"):
                     continue
+                embedded_score = None
+                if ";" in raw_word:
+                    raw_word, raw_score = raw_word.rsplit(";", 1)
+                    try:
+                        embedded_score = float(raw_score)
+                    except ValueError:
+                        rejected_count += 1
+                        continue
                 word = raw_word.upper()
                 if any(letter not in ALPHABET for letter in word):
                     rejected_count += 1
                     continue
                 words_by_length.setdefault(len(word), set()).add(word)
+                if embedded_score is not None:
+                    scores[word] = embedded_score
+                    embedded_score_count += 1
+
+        # Explicit score sources override scores embedded in the word list.
+        if scores_file is not None:
+            scores.update(self._read_scores(Path(scores_file)))
+        if word_scores is not None:
+            scores.update(
+                {word.upper(): float(score) for word, score in word_scores.items()}
+            )
 
         # Stable ordering makes seeded solver runs reproducible.
         self.words_by_length: Dict[int, List[str]] = {
@@ -71,6 +88,13 @@ class WordFiller:
             word for words in self.words_by_length.values() for word in words
         }
         self.rejected_count = rejected_count
+        self.embedded_score_count = embedded_score_count
+        self.is_scored = bool(scores)
+        self.source_name = (
+            "Spread the Word(list)"
+            if self.words_file.resolve() == SPREAD_WORDS_FILE.resolve()
+            else self.words_file.name
+        )
 
         self.word_ids_by_length: Dict[int, Dict[str, int]] = {}
         self.word_scores_by_length: Dict[int, List[float]] = {}
@@ -96,11 +120,13 @@ class WordFiller:
                 if not line or line.startswith("#"):
                     continue
                 try:
-                    word, raw_score = line.split("\t", 1)
+                    separator = "\t" if "\t" in line else ";"
+                    word, raw_score = line.rsplit(separator, 1)
                     scores[word.upper()] = float(raw_score)
                 except ValueError as exc:
                     raise ValueError(
-                        f"Invalid score at {scores_file}:{line_number}; expected WORD<TAB>SCORE"
+                        f"Invalid score at {scores_file}:{line_number}; expected "
+                        "WORD<TAB>SCORE or WORD;SCORE"
                     ) from exc
         return scores
 

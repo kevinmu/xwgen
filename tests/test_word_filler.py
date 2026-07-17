@@ -37,6 +37,19 @@ class WordFillerTest(TestCase):
         self.assertIsNotNone(cat_id)
         self.assertEqual(7.5, word_filler.quality_score(3, cat_id))
 
+    def test_reads_crossword_compiler_embedded_scores(self):
+        scored_file = Path(self.temporary_directory.name) / "scored.txt"
+        scored_file.write_text("CAT;50\nDOG;20\n", encoding="utf-8")
+
+        word_filler = WordFiller(scored_file)
+
+        self.assertTrue(word_filler.is_scored)
+        self.assertEqual(2, word_filler.embedded_score_count)
+        self.assertEqual(
+            50.0,
+            word_filler.quality_score(3, word_filler.word_id("CAT")),
+        )
+
     def test_rejects_pattern_characters_outside_standard_crossword_fill(self):
         self.words_file.write_text("CAT\n", encoding="utf-8")
         word_filler = WordFiller(self.words_file)

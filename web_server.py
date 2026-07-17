@@ -182,12 +182,34 @@ def candidate_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
     domain = dictionary.domain_for_pattern(entry.get_current_hint())
     requested_limit = int(payload.get("limit", 40))
     limit = max(1, min(requested_limit, 100))
-    candidates = list(dictionary.iter_words(entry.answer_length, domain))
+    candidates = [
+        {
+            "word": dictionary.word_for_id(entry.answer_length, word_id),
+            "score": dictionary.quality_score(entry.answer_length, word_id),
+        }
+        for word_id in dictionary.iter_word_ids(domain)
+    ]
+    candidates.sort(key=lambda candidate: (-candidate["score"], candidate["word"]))
     return {
         "entryId": entry_id,
         "pattern": entry.get_current_hint(),
         "total": len(candidates),
         "candidates": candidates[:limit],
+        "lexicon": lexicon_metadata(dictionary),
+    }
+
+
+def lexicon_metadata(dictionary: Optional[WordFiller] = None) -> Dict[str, Any]:
+    active_dictionary = dictionary or candidate_dictionary()
+    return {
+        "source": active_dictionary.source_name,
+        "scored": active_dictionary.is_scored,
+        "entries": len(active_dictionary.words_set),
+        "license": (
+            "CC BY-NC-SA 4.0"
+            if active_dictionary.source_name == "Spread the Word(list)"
+            else "Bundled fallback"
+        ),
     }
 
 
@@ -205,7 +227,10 @@ def fill_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
         restarts=max(1, min(int(options.get("restarts", 4)), 20)),
         random_seed=int(options.get("seed", 0)),
     )
-    result = PuzzleFiller(config=config).fill_puzzle(puzzle)
+    result = PuzzleFiller(
+        word_filler=candidate_dictionary(),
+        config=config,
+    ).fill_puzzle(puzzle)
     response = serialize_puzzle(puzzle, locked=locked_matrix(payload))
     response["result"] = {
         "status": result.status.value,
@@ -274,7 +299,7 @@ class XWGenRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/api/health":
-            self._send_json({"ok": True})
+            self._send_json({"ok": True, "lexicon": lexicon_metadata()})
             return
         if path == "/api/sample":
             puzzle = Puzzle.import_from_ascii(str(DEFAULT_SAMPLE))

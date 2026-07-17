@@ -4,6 +4,7 @@ from unittest import TestCase
 
 from puzzle import Puzzle
 from puzzle_filler import FillStatus, PuzzleFiller, SolverConfig
+from word_filler import WordFiller
 
 
 class PuzzleFillerTest(TestCase):
@@ -26,6 +27,14 @@ class PuzzleFillerTest(TestCase):
             word_scores=scores,
             config=SolverConfig(**config_values),
         )
+
+    def test_reuses_an_existing_word_index(self):
+        self.words_file.write_text("CAT\nDOG\n", encoding="utf-8")
+        word_filler = WordFiller(self.words_file)
+
+        filler = PuzzleFiller(word_filler=word_filler)
+
+        self.assertIs(word_filler, filler.word_filler)
 
     def test_solves_a_fixed_grid_and_applies_it_atomically(self):
         puzzle = Puzzle(3, 3)

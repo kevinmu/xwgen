@@ -5,8 +5,8 @@ solver uses bitset-backed domains, maintained arc consistency, MRV/degree
 variable ordering, quality-aware least-constraining values, conflict-directed
 backjumping, and deterministic randomized restarts.
 
-The repository currently fills layouts; it does not automatically design the
-black-square pattern.
+The constructor UI can also generate standard-style black-square patterns with
+selectable block density.
 
 ## Quick start
 
@@ -17,6 +17,7 @@ standard library. The optional `puzpy` dependency is needed for `.puz` export.
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+python scripts/install_spread_wordlist.py
 python -m unittest discover -v
 ```
 
@@ -107,9 +108,23 @@ solution. An unsatisfiable or timed-out search leaves the original grid intact.
 
 ## Fill quality scores
 
-The bundled word list has no quality metadata, so its default solutions favor
-constraint flexibility rather than human editorial taste. Supply a UTF-8 TSV
-file to rank preferred answers:
+XWGen prefers the locally installed
+[Spread the Word(list)](https://www.spreadthewordlist.com/) scored lexicon.
+Install or refresh it with:
+
+```powershell
+python scripts/install_spread_wordlist.py --force
+```
+
+The dataset is not committed to this repository. It is licensed CC BY-NC-SA
+4.0 and may be used in a free product with attribution; reconsider its license
+before commercial use. If it is absent, XWGen uses the bundled, permissively
+licensed but unscored 2021 Crossword Nexus list.
+
+Spread the Word(list) scores are built directly into its `WORD;SCORE` file.
+The solver prioritizes higher-scored candidates, and the constructor displays
+those scores in quality-ranked candidate results. You can still supply a UTF-8
+TSV or semicolon-separated override file:
 
 ```text
 # WORD<TAB>SCORE
@@ -124,7 +139,8 @@ python fill.py puzz1.out --scores word_scores.tsv --output filled.out
 Scores are combined with the least-constraining-value score. Higher values are
 preferred, while every dictionary candidate remains available if backtracking
 needs it. The standard solver accepts A-Z fill; malformed, rebus, numeric, and
-slash-separated entries are filtered when the dictionary is loaded.
+slash-separated entries are filtered when the dictionary is loaded. See
+[`TODO.md`](TODO.md) for the planned optional AI-assisted scoring pipeline.
 
 ## Solver outline
 

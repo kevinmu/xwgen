@@ -91,14 +91,19 @@ class PuzzleFiller:
         self,
         words_file: Optional[Union[str, Path]] = None,
         *,
+        word_filler: Optional[WordFiller] = None,
         word_scores: Optional[Mapping[str, float]] = None,
         scores_file: Optional[Union[str, Path]] = None,
         config: Optional[SolverConfig] = None,
     ) -> None:
-        self.word_filler = WordFiller(
-            words_file,
-            word_scores=word_scores,
-            scores_file=scores_file,
+        if word_filler is not None and any(
+            option is not None for option in (words_file, word_scores, scores_file)
+        ):
+            raise ValueError(
+                "word_filler cannot be combined with word or score file options"
+            )
+        self.word_filler = word_filler or WordFiller(
+            words_file, word_scores=word_scores, scores_file=scores_file
         )
         self.config = config or SolverConfig()
 
