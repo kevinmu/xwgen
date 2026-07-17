@@ -222,9 +222,6 @@ export default function Home() {
   const [layoutBusy, setLayoutBusy] = useState(false);
   const [layoutProfile, setLayoutProfile] = useState<LayoutProfile>("classic");
   const [qualityMode, setQualityMode] = useState<QualityMode>("balanced");
-  const [status, setStatus] = useState("Loading the sample puzzle…");
-  const [warnings, setWarnings] = useState<string[]>([]);
-  const [stats, setStats] = useState<FillStats | null>(null);
   const [candidateData, setCandidateData] = useState<CandidateResponse | null>(null);
   const [lexicon, setLexicon] = useState<LexiconMetadata | null>(null);
   const [candidateLoading, setCandidateLoading] = useState(false);
@@ -282,7 +279,6 @@ export default function Home() {
     if (puzzle.entries) {
       setClues(Object.fromEntries(puzzle.entries.map((entry) => [entry.id, entry.clue])));
     }
-    setWarnings(puzzle.warnings ?? []);
     setPast([]);
     setFuture([]);
     setSelected([0, 0]);
@@ -306,13 +302,9 @@ export default function Home() {
         setLexicon(healthData.lexicon);
         setEngine("ready");
         loadPuzzle(sample);
-        setStatus(
-          `${healthData.lexicon.source} loaded${healthData.lexicon.scored ? " with quality scores" : " as an unscored fallback"}.`,
-        );
       } catch {
         if (cancelled) return;
         setEngine("offline");
-        setStatus("The editor is ready, but the fill engine is not connected.");
       }
     }
     void start();
@@ -354,7 +346,6 @@ export default function Home() {
       setPast((items) => [...items.slice(-49), cloneGrid(grid)]);
       setFuture([]);
       setGrid(next);
-      setStats(null);
     },
     [grid],
   );
@@ -408,7 +399,6 @@ export default function Home() {
     apply(row, col);
     if (symmetry) apply(grid.length - 1 - row, grid[0].length - 1 - col);
     commitGrid(next);
-    setStatus(newValue ? "Block added." : "Block removed.");
   };
 
   const moveSelection = useCallback(
@@ -492,7 +482,6 @@ export default function Home() {
       next[row][col] = { ...next[row][col], letter: word[index], locked: true };
     });
     commitGrid(next);
-    setStatus(`${word} set as ${activeEntry.id} and locked.`);
   };
 
   const toggleActiveLock = () => {
@@ -505,7 +494,6 @@ export default function Home() {
       if (next[row][col].letter) next[row][col].locked = shouldLock;
     });
     commitGrid(next);
-    setStatus(`${activeEntry.id} ${shouldLock ? "locked" : "unlocked"}.`);
   };
 
   const fillGrid = async () => {
@@ -513,8 +501,6 @@ export default function Home() {
     const controller = new AbortController();
     abortRef.current = controller;
     setBusy(true);
-    setStats(null);
-    setStatus("Searching for a consistent fill…");
     try {
       const response = await fetch(`${API_BASE}/fill`, {
         method: "POST",
@@ -542,17 +528,11 @@ export default function Home() {
           });
           return next;
         });
-        setStatus(
-          `${data.result.message}. ${data.result.elapsedSeconds.toFixed(2)} seconds.`,
-        );
       } else {
-        setStatus(data.result?.message || "No valid fill was found.");
+        window.alert(data.result?.message || "No valid fill was found.");
       }
-      setStats(data.result ?? null);
-      setWarnings(data.warnings ?? []);
     } catch (error) {
-      if ((error as Error).name === "AbortError") setStatus("Fill stopped.");
-      else setStatus((error as Error).message);
+      if ((error as Error).name !== "AbortError") window.alert((error as Error).message);
     } finally {
       setBusy(false);
       abortRef.current = null;
@@ -576,7 +556,6 @@ export default function Home() {
     }
 
     setLayoutBusy(true);
-    setStatus(`Generating a ${layoutProfile} block layout…`);
     const layoutSeed = layoutSeedRef.current || Date.now();
     try {
       const response = await fetch(`${API_BASE}/layout`, {
@@ -594,8 +573,6 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || "Layout generation failed");
       commitGrid(data.cells);
       setClues({});
-      setWarnings(data.warnings ?? []);
-      setStats(null);
       const firstWhite = data.cells
         .flatMap((row, rowIndex) =>
           row.map((cell, colIndex) => ({ cell, rowIndex, colIndex })),
@@ -604,11 +581,8 @@ export default function Home() {
       if (firstWhite) setSelected([firstWhite.rowIndex, firstWhite.colIndex]);
       setDirection("A");
       layoutSeedRef.current = layoutSeed + 1;
-      setStatus(
-        `Generated ${layoutProfile} layout with ${data.layout?.blockCount ?? 0} blocks. Click again for another variation.`,
-      );
     } catch (error) {
-      setStatus((error as Error).message);
+      window.alert((error as Error).message);
     } finally {
       setLayoutBusy(false);
     }
@@ -619,12 +593,9 @@ export default function Home() {
     setGrid(blankGrid());
     setMetadata({ title: "Untitled crossword", author: "", copyright: "", note: "" });
     setClues({});
-    setWarnings([]);
-    setStats(null);
     setPast([]);
     setFuture([]);
     setSelected([0, 0]);
-    setStatus("Blank 15×15 grid ready.");
   };
 
   const exportAscii = () => {
@@ -644,12 +615,10 @@ export default function Home() {
       ),
     ];
     downloadBlob(new Blob([lines.join("\n")], { type: "text/plain" }), "xwgen-puzzle.out");
-    setStatus("ASCII puzzle exported.");
   };
 
   const exportPuz = async () => {
     if (engine !== "ready") return;
-    setStatus("Preparing .puz file…");
     try {
       const response = await fetch(`${API_BASE}/export/puz`, {
         method: "POST",
@@ -658,9 +627,8 @@ export default function Home() {
       });
       if (!response.ok) throw new Error("Could not export the .puz file.");
       downloadBlob(await response.blob(), "xwgen-puzzle.puz");
-      setStatus(".puz file exported.");
     } catch (error) {
-      setStatus((error as Error).message);
+      window.alert((error as Error).message);
     }
   };
 
@@ -671,9 +639,8 @@ export default function Home() {
       const parsed = parseAscii(await file.text());
       loadPuzzle(parsed);
       setClues(parsed.clues);
-      setStatus(`${file.name} imported.`);
     } catch (error) {
-      setStatus((error as Error).message);
+      window.alert((error as Error).message);
     } finally {
       event.target.value = "";
     }
@@ -742,6 +709,16 @@ export default function Home() {
           </div>
         </div>
         <div className="document-actions">
+          <button
+            className={`fill-button header-fill-button ${busy ? "is-stopping" : ""}`}
+            type="button"
+            onClick={busy ? stopFill : fillGrid}
+            disabled={engine !== "ready" || (!busy && layoutBusy)}
+            aria-busy={busy}
+          >
+            <span aria-hidden="true">{busy ? "■" : "✦"}</span>
+            {busy ? "Stop fill" : "Fill grid"}
+          </button>
           <button className="quiet-button" type="button" onClick={resetToBlank}>New grid</button>
           <button className="quiet-button" type="button" onClick={() => fileInputRef.current?.click()}>Import</button>
           <div className="export-group">
@@ -863,7 +840,7 @@ export default function Home() {
                   <button
                     key={key}
                     type="button"
-                    className={`grid-cell ${cell.black ? "black" : ""} ${isActive ? "in-entry" : ""} ${isSelected ? "selected" : ""} ${cell.locked ? "locked" : ""} ${colIndex === row.length - 1 ? "last-column" : ""} ${rowIndex === numberedGrid.length - 1 ? "last-row" : ""}`}
+                    className={`grid-cell ${cell.black ? "black" : ""} ${cell.letter && !cell.locked ? "provisional" : ""} ${isActive ? "in-entry" : ""} ${isSelected ? "selected" : ""} ${cell.locked ? "locked" : ""} ${colIndex === row.length - 1 ? "last-column" : ""} ${rowIndex === numberedGrid.length - 1 ? "last-row" : ""}`}
                     onClick={() => selectCell(rowIndex, colIndex)}
                     onKeyDown={handleCellKeyDown}
                     aria-label={cell.black ? `Block at row ${rowIndex + 1}, column ${colIndex + 1}` : `Row ${rowIndex + 1}, column ${colIndex + 1}${cell.letter ? `, ${cell.letter}` : ""}`}
@@ -871,7 +848,6 @@ export default function Home() {
                   >
                     {!cell.black && cell.number ? <span className="cell-number">{cell.number}</span> : null}
                     {!cell.black ? <span className="cell-letter">{cell.letter}</span> : null}
-                    {!cell.black && cell.locked ? <span className="lock-mark" aria-hidden="true" /> : null}
                   </button>
                 );
               }),
@@ -1018,34 +994,6 @@ export default function Home() {
         </aside>
       </div>
 
-      <section className="run-bar" aria-live="polite">
-        <div className="run-status">
-          <span className={`run-indicator ${busy ? "searching" : stats?.status === "solved" ? "solved" : ""}`} aria-hidden="true" />
-          <div>
-            <p>{status}</p>
-            {stats ? (
-              <small>
-                {stats.status === "solved"
-                  ? stats.minimumScore === null
-                    ? "open tier"
-                    : `${stats.minimumScore}+ tier`
-                  : `${stats.qualityMode} mode`} ·{" "}
-                {stats.nodes.toLocaleString()} nodes · {stats.backjumps.toLocaleString()} backjumps ·{" "}
-                {stats.propagations.toLocaleString()} propagations
-              </small>
-            ) : (
-              <small>Unlocked letters are replaced on the next fill.</small>
-            )}
-          </div>
-        </div>
-        {warnings.length ? <span className="warning-count" title={warnings.join("\n")}>{warnings.length} grid {warnings.length === 1 ? "warning" : "warnings"}</span> : null}
-        <div className="run-actions">
-          {busy ? <button className="stop-button" type="button" onClick={stopFill}>Stop</button> : null}
-          <button className="fill-button" type="button" onClick={fillGrid} disabled={engine !== "ready" || busy}>
-            <span aria-hidden="true">✦</span> Fill grid
-          </button>
-        </div>
-      </section>
     </main>
   );
 }
