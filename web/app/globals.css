@@ -301,6 +301,23 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
 .pattern { display: flex; gap: 5px; overflow-x: auto; padding: 18px 20px 8px; }
 .pattern span { flex: 0 0 27px; height: 31px; display: grid; place-items: center; border-bottom: 2px solid var(--ink); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 17px; font-weight: 800; }
 .pattern span.empty { border-color: #b9b5a9; }
+.selected-word-score {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 20px 0;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  background: #f7f4eb;
+}
+.selected-word-score > div { display: grid; gap: 2px; }
+.selected-word-score span { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.selected-word-score small { color: var(--muted); font-size: 9px; }
+.selected-word-score strong { min-width: 42px; color: var(--ink); font-family: Georgia, serif; font-size: 22px; text-align: right; }
+.selected-word-score.scored { border-color: #d7c75f; background: var(--yellow-soft); }
+.selected-word-score.missing strong { color: var(--red); font-family: inherit; font-size: 12px; }
+.selected-word-score.incomplete strong, .selected-word-score.loading strong, .selected-word-score.unscored strong { color: var(--muted); }
 .clue-field { padding: 14px 20px 10px; }
 .clue-field textarea { resize: vertical; padding: 9px 10px; border: 1px solid var(--line); border-radius: 2px; background: white; line-height: 1.45; }
 .entry-lock-button { margin: 0 20px 18px; background: transparent; }
@@ -319,6 +336,47 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
 .lexicon-credit { margin: 0; padding: 9px 20px; border-top: 1px solid var(--line); background: #f7f4eb; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .lexicon-credit a { color: var(--blue); font-weight: 750; }
 .empty-state { margin: 0; padding: 22px 20px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+.clue-sheet {
+  margin-top: 28px;
+  border: 1px solid var(--line);
+  background: rgba(255, 253, 247, 0.86);
+  box-shadow: var(--shadow);
+}
+.clue-sheet-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.clue-progress { padding: 6px 9px; border: 1px solid var(--line); font-size: 10px; font-weight: 800; }
+.clue-progress.incomplete { border-color: #e2b659; background: #fff3ca; color: #795c17; }
+.clue-progress.complete { border-color: #9bc8b7; background: #e8f5ef; color: var(--green); }
+.clue-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.clue-column { min-width: 0; padding: 22px 24px 26px; }
+.clue-column + .clue-column { border-left: 1px solid var(--line); }
+.clue-column h3 { margin: 0 0 12px; font-family: Georgia, "Times New Roman", serif; font-size: 20px; }
+.clue-column ol { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.clue-column button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.clue-column button:hover { background: white; border-color: var(--line); }
+.clue-column button.active { border-color: #d7c75f; background: var(--yellow-soft); }
+.clue-column button > strong { font-size: 12px; text-align: right; }
+.clue-column button > span { min-width: 0; font-family: Georgia, "Times New Roman", serif; font-size: 14px; line-height: 1.35; }
+.clue-column button.missing > span { color: #9d5c3e; font-family: inherit; font-size: 12px; font-style: italic; }
+.clue-column button > small { padding: 2px 4px; background: #f6e5dc; color: #944b35; font-size: 8px; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
 
 .run-bar {
   position: fixed;
@@ -378,6 +436,10 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
   .density-select select { width: 100%; }
   .crossword-grid { min-width: 0; width: 100%; }
   .grid-caption { gap: 9px; font-size: 8px; }
+  .clue-sheet-heading { align-items: flex-start; padding: 17px 16px; }
+  .clue-columns { grid-template-columns: 1fr; }
+  .clue-column { padding: 18px 16px 20px; }
+  .clue-column + .clue-column { border-top: 1px solid var(--line); border-left: 0; }
   .run-bar { bottom: 8px; flex-wrap: wrap; gap: 8px; }
   .run-status { flex: 1 1 100%; }
   .warning-count { display: none; }

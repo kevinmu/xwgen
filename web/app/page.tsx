@@ -74,6 +74,11 @@ type CandidateResponse = {
   pattern: string;
   total: number;
   candidates: Array<{ word: string; score: number }>;
+  selectedWord: {
+    word: string;
+    score: number | null;
+    inLexicon: boolean;
+  } | null;
   lexicon: LexiconMetadata;
 };
 
@@ -244,6 +249,12 @@ export default function Home() {
       null,
     [direction, entriesAtSelection],
   );
+
+  const acrossEntries = entries.filter((entry) => entry.direction === "A");
+  const downEntries = entries.filter((entry) => entry.direction === "D");
+  const missingClueCount = entries.filter((entry) => !clues[entry.id]?.trim()).length;
+  const activeCandidateData =
+    candidateData?.entryId === activeEntry?.id ? candidateData : null;
 
   const buildPayload = useCallback(
     () => ({
@@ -656,6 +667,46 @@ export default function Home() {
     }
   };
 
+  const selectEntry = (entry: Entry) => {
+    setSelected(entry.cells[0]);
+    setDirection(entry.direction);
+  };
+
+  const selectedWordScore = (() => {
+    if (!activeEntry || activeEntry.pattern.includes(".")) {
+      return { value: "—", note: "Complete the entry to score it", state: "incomplete" };
+    }
+    if (candidateLoading) {
+      return { value: "…", note: "Checking the word list", state: "loading" };
+    }
+    const selectedWord = activeCandidateData?.selectedWord;
+    if (engine !== "ready") {
+      return { value: "Unavailable", note: "Fill engine is offline", state: "unscored" };
+    }
+    if (!activeCandidateData || selectedWord?.word !== activeEntry.pattern) {
+      return { value: "…", note: "Checking the word list", state: "loading" };
+    }
+    if (!selectedWord?.inLexicon) {
+      return {
+        value: "Not listed",
+        note: lexicon?.source ?? "Active word list",
+        state: "missing",
+      };
+    }
+    if (!activeCandidateData?.lexicon.scored) {
+      return {
+        value: "Unscored",
+        note: activeCandidateData?.lexicon.source ?? "Active word list",
+        state: "unscored",
+      };
+    }
+    return {
+      value: String(selectedWord.score),
+      note: activeCandidateData.lexicon.source,
+      state: "scored",
+    };
+  })();
+
   const activeCellSet = new Set(activeEntry?.cells.map(([r, c]) => `${r}:${c}`) ?? []);
   const selectedCell = `${selected[0]}:${selected[1]}`;
   const lockedCount = grid.flat().filter((cell) => cell.locked).length;
@@ -810,6 +861,13 @@ export default function Home() {
                   <span key={`${activeEntry.id}-${index}`} className={letter === "." ? "empty" : ""}>{letter === "." ? "" : letter}</span>
                 ))}
               </div>
+              <div className={`selected-word-score ${selectedWordScore.state}`} aria-live="polite">
+                <div>
+                  <span>Wordlist score</span>
+                  <small>{selectedWordScore.note}</small>
+                </div>
+                <strong>{selectedWordScore.value}</strong>
+              </div>
               <label className="clue-field">
                 <span>Clue</span>
                 <textarea
@@ -871,6 +929,54 @@ export default function Home() {
           )}
         </aside>
       </div>
+
+      <section className="clue-sheet" aria-labelledby="puzzle-clues-heading">
+        <div className="clue-sheet-heading">
+          <div>
+            <p className="eyebrow">Solve view</p>
+            <h2 id="puzzle-clues-heading">Puzzle clues</h2>
+          </div>
+          <span className={missingClueCount ? "clue-progress incomplete" : "clue-progress complete"}>
+            {missingClueCount
+              ? `${missingClueCount} ${missingClueCount === 1 ? "clue" : "clues"} still needed`
+              : "All clues written"}
+          </span>
+        </div>
+        <div className="clue-columns">
+          {([
+            ["Across", acrossEntries],
+            ["Down", downEntries],
+          ] as const).map(([heading, clueEntries]) => (
+            <section
+              className="clue-column"
+              key={heading}
+              aria-labelledby={`${heading.toLowerCase()}-clues-heading`}
+            >
+              <h3 id={`${heading.toLowerCase()}-clues-heading`}>{heading}</h3>
+              <ol>
+                {clueEntries.map((entry) => {
+                  const clue = clues[entry.id]?.trim();
+                  const isActive = entry.id === activeEntry?.id;
+                  return (
+                    <li key={entry.id}>
+                      <button
+                        type="button"
+                        className={`${isActive ? "active" : ""} ${clue ? "" : "missing"}`}
+                        onClick={() => selectEntry(entry)}
+                        aria-label={`${entry.number} ${heading}: ${clue || "clue needed"}`}
+                      >
+                        <strong>{entry.number}</strong>
+                        <span>{clue || "Clue needed"}</span>
+                        {!clue ? <small>Missing</small> : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          ))}
+        </div>
+      </section>
 
       <section className="run-bar" aria-live="polite">
         <div className="run-status">

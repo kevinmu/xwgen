@@ -60,7 +60,29 @@ class WebServerPayloadTest(TestCase):
         self.assertEqual("1A", response["entryId"])
         self.assertEqual("THUS", response["pattern"])
         self.assertIn("THUS", [candidate["word"] for candidate in response["candidates"]])
+        self.assertEqual("THUS", response["selectedWord"]["word"])
+        self.assertTrue(response["selectedWord"]["inLexicon"])
+        self.assertIsNotNone(response["selectedWord"]["score"])
         self.assertIn("source", response["lexicon"])
+
+    def test_scores_only_complete_selected_words(self):
+        self.payload["cells"][0][0]["letter"] = ""
+        self.payload["entryId"] = "1A"
+
+        response = candidate_response(self.payload)
+
+        self.assertIsNone(response["selectedWord"])
+
+    def test_marks_a_complete_word_that_is_not_in_the_lexicon(self):
+        for column, letter in enumerate("QZXJ"):
+            self.payload["cells"][0][column]["letter"] = letter
+        self.payload["entryId"] = "1A"
+
+        response = candidate_response(self.payload)
+
+        self.assertEqual("QZXJ", response["selectedWord"]["word"])
+        self.assertFalse(response["selectedWord"]["inLexicon"])
+        self.assertIsNone(response["selectedWord"]["score"])
 
     def test_generates_a_blank_standard_layout(self):
         response = layout_response(

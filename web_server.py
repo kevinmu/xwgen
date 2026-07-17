@@ -173,9 +173,11 @@ def candidate_dictionary() -> WordFiller:
 
 def candidate_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
     puzzle = puzzle_from_payload(payload, locked_only=True)
+    current_puzzle = puzzle_from_payload(payload)
     entry_id = str(payload.get("entryId", ""))
     entry = puzzle.entries.get(entry_id)
-    if entry is None:
+    current_entry = current_puzzle.entries.get(entry_id)
+    if entry is None or current_entry is None:
         raise PayloadError("The selected entry no longer exists")
 
     dictionary = candidate_dictionary()
@@ -190,11 +192,25 @@ def candidate_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
         for word_id in dictionary.iter_word_ids(domain)
     ]
     candidates.sort(key=lambda candidate: (-candidate["score"], candidate["word"]))
+    current_answer = current_entry.get_current_hint()
+    selected_word = None
+    if "." not in current_answer:
+        current_word_id = dictionary.word_id(current_answer)
+        selected_word = {
+            "word": current_answer,
+            "score": (
+                dictionary.quality_score(current_entry.answer_length, current_word_id)
+                if current_word_id is not None
+                else None
+            ),
+            "inLexicon": current_word_id is not None,
+        }
     return {
         "entryId": entry_id,
         "pattern": entry.get_current_hint(),
         "total": len(candidates),
         "candidates": candidates[:limit],
+        "selectedWord": selected_word,
         "lexicon": lexicon_metadata(dictionary),
     }
 
