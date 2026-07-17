@@ -5,6 +5,7 @@ from puzzle import Puzzle
 from web_server import (
     PayloadError,
     candidate_response,
+    layout_response,
     puzzle_from_payload,
     serialize_puzzle,
 )
@@ -59,3 +60,13 @@ class WebServerPayloadTest(TestCase):
         self.assertEqual("1A", response["entryId"])
         self.assertEqual("THUS", response["pattern"])
         self.assertIn("THUS", response["candidates"])
+
+    def test_generates_a_blank_standard_layout(self):
+        response = layout_response(
+            {"rows": 15, "cols": 15, "profile": "classic", "seed": 7}
+        )
+
+        self.assertEqual("classic", response["layout"]["profile"])
+        self.assertEqual(33, response["layout"]["blockCount"])
+        self.assertTrue(all(not cell["letter"] for row in response["cells"] for cell in row))
+        self.assertEqual([], response["warnings"])

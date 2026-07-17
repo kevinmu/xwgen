@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 from urllib.parse import urlparse
 
+from layout_generator import generate_layout
 from puzzle import Puzzle
 from puzzle_filler import PuzzleFiller, SolverConfig
 from word_filler import WordFiller
@@ -220,6 +221,46 @@ def fill_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
     return response
 
 
+def layout_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    try:
+        rows = int(payload.get("rows", 15))
+        cols = int(payload.get("cols", 15))
+        seed = int(payload.get("seed", 0))
+    except (TypeError, ValueError) as exc:
+        raise PayloadError("Layout dimensions and seed must be integers") from exc
+    profile = str(payload.get("profile", "classic")).lower()
+    try:
+        generated = generate_layout(
+            rows,
+            cols,
+            profile=profile,
+            seed=seed,
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise PayloadError(str(exc)) from exc
+
+    puzzle = Puzzle(rows, cols)
+    puzzle.title = str(payload.get("title", "Untitled crossword"))[:255]
+    puzzle.author = str(payload.get("author", ""))[:255]
+    puzzle.copyright = str(payload.get("copyright", ""))[:255]
+    puzzle.note = str(payload.get("note", ""))[:2000]
+    for row in range(rows):
+        for col in range(cols):
+            puzzle.grid[row][col].is_black = generated.blocks[row][col]
+    puzzle.initialize()
+
+    response = serialize_puzzle(puzzle)
+    response["layout"] = {
+        "profile": generated.profile,
+        "blockCount": generated.block_count,
+        "targetBlockCount": generated.target_block_count,
+        "density": generated.density,
+        "seed": generated.seed,
+    }
+    response["warnings"] = shape_warnings(puzzle)
+    return response
+
+
 class XWGenRequestHandler(BaseHTTPRequestHandler):
     server_version = "XWGen/1.0"
 
@@ -256,6 +297,9 @@ class XWGenRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/fill":
                 self._send_json(fill_response(payload))
+                return
+            if path == "/api/layout":
+                self._send_json(layout_response(payload))
                 return
             if path == "/api/export/puz":
                 puzzle = puzzle_from_payload(payload)

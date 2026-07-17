@@ -11,6 +11,7 @@ import {
 } from "react";
 
 type Direction = "A" | "D";
+type LayoutProfile = "airy" | "classic" | "dense";
 
 type Cell = {
   black: boolean;
@@ -41,6 +42,13 @@ type PuzzlePayload = {
   entries?: Array<{ id: string; clue: string }>;
   warnings?: string[];
   result?: FillStats;
+  layout?: {
+    profile: LayoutProfile;
+    blockCount: number;
+    targetBlockCount: number;
+    density: number;
+    seed: number;
+  };
 };
 
 type FillStats = {
@@ -195,6 +203,8 @@ export default function Home() {
   const [symmetry, setSymmetry] = useState(true);
   const [engine, setEngine] = useState<"checking" | "ready" | "offline">("checking");
   const [busy, setBusy] = useState(false);
+  const [layoutBusy, setLayoutBusy] = useState(false);
+  const [layoutProfile, setLayoutProfile] = useState<LayoutProfile>("classic");
   const [status, setStatus] = useState("Loading the sample puzzle…");
   const [warnings, setWarnings] = useState<string[]>([]);
   const [stats, setStats] = useState<FillStats | null>(null);
@@ -204,6 +214,7 @@ export default function Home() {
   const [future, setFuture] = useState<Cell[][][]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const layoutSeedRef = useRef(0);
 
   const derived = useMemo(() => deriveEntries(grid), [grid]);
   const numberedGrid = derived.cells;
@@ -511,6 +522,59 @@ export default function Home() {
 
   const stopFill = () => abortRef.current?.abort();
 
+  const generateBlockLayout = async () => {
+    if (engine !== "ready" || busy || layoutBusy) return;
+    const hasContent = grid.some((row) =>
+      row.some((cell) => cell.black || Boolean(cell.letter)),
+    );
+    if (
+      hasContent &&
+      !window.confirm(
+        `Generate a new ${layoutProfile} layout? This replaces all blocks and letters in the current grid.`,
+      )
+    ) {
+      return;
+    }
+
+    setLayoutBusy(true);
+    setStatus(`Generating a ${layoutProfile} block layout…`);
+    const layoutSeed = layoutSeedRef.current || Date.now();
+    try {
+      const response = await fetch(`${API_BASE}/layout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rows: grid.length,
+          cols: grid[0].length,
+          profile: layoutProfile,
+          seed: layoutSeed,
+          ...metadata,
+        }),
+      });
+      const data = (await response.json()) as PuzzlePayload & { error?: string };
+      if (!response.ok) throw new Error(data.error || "Layout generation failed");
+      commitGrid(data.cells);
+      setClues({});
+      setWarnings(data.warnings ?? []);
+      setStats(null);
+      const firstWhite = data.cells
+        .flatMap((row, rowIndex) =>
+          row.map((cell, colIndex) => ({ cell, rowIndex, colIndex })),
+        )
+        .find(({ cell }) => !cell.black);
+      if (firstWhite) setSelected([firstWhite.rowIndex, firstWhite.colIndex]);
+      setDirection("A");
+      layoutSeedRef.current = layoutSeed + 1;
+      setStatus(
+        `Generated ${layoutProfile} layout with ${data.layout?.blockCount ?? 0} blocks. Click again for another variation.`,
+      );
+    } catch (error) {
+      setStatus((error as Error).message);
+    } finally {
+      setLayoutBusy(false);
+    }
+  };
+
   const resetToBlank = () => {
     if (!window.confirm("Start a blank 15×15 grid? Your current grid will be replaced.")) return;
     setGrid(blankGrid());
@@ -645,6 +709,33 @@ export default function Home() {
             </div>
           </div>
 
+          <div className="layout-rail">
+            <div className="layout-label">
+              <p className="eyebrow">Block layout</p>
+              <span>Symmetric · connected · 3+ letter entries</span>
+            </div>
+            <label className="density-select">
+              <span className="visually-hidden">Block density</span>
+              <select
+                value={layoutProfile}
+                onChange={(event) => setLayoutProfile(event.target.value as LayoutProfile)}
+                disabled={layoutBusy || busy}
+              >
+                <option value="airy">Airy · ~12%</option>
+                <option value="classic">Classic · ~15%</option>
+                <option value="dense">Dense · ~17%</option>
+              </select>
+            </label>
+            <button
+              className="generate-layout-button"
+              type="button"
+              onClick={generateBlockLayout}
+              disabled={engine !== "ready" || layoutBusy || busy}
+            >
+              {layoutBusy ? "Generating…" : "Generate layout"}
+            </button>
+          </div>
+
           <div
             className={`crossword-grid ${tool === "block" ? "block-mode" : ""}`}
             style={{ "--grid-cols": grid[0]?.length ?? 15 } as React.CSSProperties}
@@ -659,7 +750,7 @@ export default function Home() {
                   <button
                     key={key}
                     type="button"
-                    className={`grid-cell ${cell.black ? "black" : ""} ${isActive ? "in-entry" : ""} ${isSelected ? "selected" : ""} ${cell.locked ? "locked" : ""}`}
+                    className={`grid-cell ${cell.black ? "black" : ""} ${isActive ? "in-entry" : ""} ${isSelected ? "selected" : ""} ${cell.locked ? "locked" : ""} ${colIndex === row.length - 1 ? "last-column" : ""} ${rowIndex === numberedGrid.length - 1 ? "last-row" : ""}`}
                     onClick={() => selectCell(rowIndex, colIndex)}
                     onKeyDown={handleCellKeyDown}
                     aria-label={cell.black ? `Block at row ${rowIndex + 1}, column ${colIndex + 1}` : `Row ${rowIndex + 1}, column ${colIndex + 1}${cell.letter ? `, ${cell.letter}` : ""}`}

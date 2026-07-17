@@ -58,7 +58,9 @@ solver chooses a different answer. Non-placeholder clue text is preserved.
 The browser-based constructor provides an editable and numbered crossword grid,
 180-degree block symmetry, seed-entry locks, undo/redo, live dictionary
 candidates, CSP fill controls, clue editing, ASCII import/export, and `.puz`
-export.
+export. Its block-layout generator offers airy, classic, and dense presets while
+enforcing rotational symmetry, connected white cells, minimum three-letter
+entries, and no solid 2x2 block areas.
 
 Install the web dependencies once:
 

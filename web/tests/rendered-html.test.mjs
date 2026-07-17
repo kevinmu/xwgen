@@ -23,5 +23,7 @@ test("server-renders the XWGen constructor", async () => {
   assert.match(html, /XWGen Studio/);
   assert.match(html, /Crossword constructor/);
   assert.match(html, /Fill grid/);
+  assert.match(html, /Generate layout/);
+  assert.match(html, /Airy · ~12%/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/);
 });
