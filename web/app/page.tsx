@@ -314,6 +314,7 @@ export default function Home() {
   const [themeWizardOpen, setThemeWizardOpen] = useState(false);
   const [themeStep, setThemeStep] = useState<1 | 2 | 3>(1);
   const [themeCount, setThemeCount] = useState<ThemeCount>(4);
+  const [themeName, setThemeName] = useState("");
   const [themeDrafts, setThemeDrafts] = useState<ThemeAnswerDraft[]>([]);
   const [themeError, setThemeError] = useState("");
   const abortRef = useRef<AbortController | null>(null);
@@ -648,6 +649,8 @@ export default function Home() {
 
   const openThemeWizard = () => {
     const drafts = createThemeDrafts(themeCount);
+    const currentTitle = metadata.title.trim();
+    setThemeName(currentTitle === "Untitled crossword" ? "" : currentTitle);
     setThemeDrafts(drafts);
     setThemeStep(1);
     setThemeError(
@@ -727,6 +730,10 @@ export default function Home() {
 
     commitGrid(next);
     setClues({});
+    setMetadata((current) => ({
+      ...current,
+      title: themeName.trim() || "Untitled crossword",
+    }));
     setSelected(themeDrafts[0]?.entry.cells[0] ?? [0, 0]);
     setDirection("A");
     setThemeWizardOpen(false);
@@ -1268,6 +1275,18 @@ export default function Home() {
                       We’ll use long Across slots and favor rotationally symmetric pairs in this layout.
                     </p>
                   </div>
+                  <label className="theme-name-field">
+                    <span>
+                      <strong>Theme / puzzle title</strong>
+                      <small>This will become the puzzle title.</small>
+                    </span>
+                    <input
+                      value={themeName}
+                      placeholder="e.g. Under the Sea"
+                      maxLength={255}
+                      onChange={(event) => setThemeName(event.target.value)}
+                    />
+                  </label>
                   <div className="theme-count-options" aria-label="Number of theme answers">
                     {([4, 5, 6] as ThemeCount[]).map((count) => (
                       <button
@@ -1306,6 +1325,10 @@ export default function Home() {
                   <div className="theme-step-heading">
                     <h3>Enter your theme answers</h3>
                     <p>Spaces and punctuation are removed automatically. Every answer must fit exactly.</p>
+                  </div>
+                  <div className="theme-name-banner">
+                    <span>Theme</span>
+                    <strong>{themeName.trim() || "Untitled theme"}</strong>
                   </div>
                   <div className="theme-answer-list">
                     {themeDrafts.map(({ entry, answer }, index) => {

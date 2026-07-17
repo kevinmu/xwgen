@@ -594,6 +594,39 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
 .theme-step-content { display: grid; gap: 20px; }
 .theme-step-heading h3 { margin: 0 0 6px; font-family: Georgia, "Times New Roman", serif; font-size: 20px; }
 .theme-step-heading p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.theme-name-field {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(0, 1.3fr);
+  align-items: center;
+  gap: 18px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fafbfc;
+}
+.theme-name-field > span { display: grid; gap: 3px; }
+.theme-name-field strong { font-size: 11px; }
+.theme-name-field small { color: var(--muted); font-size: 9px; }
+.theme-name-field input {
+  min-width: 0;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid #cbd1d9;
+  border-radius: 3px;
+  background: white;
+  font-size: 13px;
+}
+.theme-name-field:focus-within { border-color: #91a6e2; box-shadow: 0 0 0 2px rgba(49, 89, 215, 0.1); }
+.theme-name-banner {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--blue);
+  background: #f3f5fc;
+}
+.theme-name-banner span { color: var(--blue); font-size: 9px; font-weight: 850; letter-spacing: 0.1em; text-transform: uppercase; }
+.theme-name-banner strong { font-family: Georgia, "Times New Roman", serif; font-size: 15px; }
 .theme-count-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .theme-count-options button {
   display: grid;
@@ -685,7 +718,7 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
 .theme-error { margin: 15px 0 0; color: #a23c2e; font-size: 11px; font-weight: 750; }
 .theme-wizard-footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   padding: 16px 26px;
   border-top: 1px solid var(--line);
@@ -762,6 +795,7 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
   .theme-steps li { gap: 5px; font-size: 9px; }
   .theme-steps li:not(:last-child)::after { margin: 0 5px; }
   .theme-wizard-body { min-height: 0; padding: 20px 18px 16px; }
+  .theme-name-field { grid-template-columns: 1fr; gap: 9px; }
   .theme-slot-preview { grid-template-columns: 1fr; gap: 14px; }
   .theme-answer-list label { grid-template-columns: minmax(0, 1fr) 42px; gap: 8px; }
   .theme-answer-slot { grid-column: 1 / -1; }
