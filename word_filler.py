@@ -12,6 +12,7 @@ from typing import (
     Optional,
     Sequence,
     Set,
+    Tuple,
     Union,
 )
 
@@ -98,6 +99,7 @@ class WordFiller:
 
         self.word_ids_by_length: Dict[int, Dict[str, int]] = {}
         self.word_scores_by_length: Dict[int, List[float]] = {}
+        self.minimum_score_masks: Dict[Tuple[int, float], int] = {}
         self.full_masks: Dict[int, int] = {}
         self.position_masks: Dict[int, Sequence[Sequence[int]]] = {}
 
@@ -147,12 +149,20 @@ class WordFiller:
             for masks_at_position in raw_masks
         )
 
-    def domain_for_pattern(self, pattern: str) -> int:
+    def domain_for_pattern(
+        self,
+        pattern: str,
+        minimum_score: Optional[float] = None,
+    ) -> int:
         """Return the complete candidate domain for a pattern such as ``.A..E``."""
         pattern = pattern.upper()
         domain = self.full_masks.get(len(pattern), 0)
         if domain == 0:
             return 0
+        if minimum_score is not None:
+            domain &= self.mask_for_minimum_score(len(pattern), minimum_score)
+            if domain == 0:
+                return 0
 
         masks = self.position_masks[len(pattern)]
         for position, letter in enumerate(pattern):
@@ -166,6 +176,19 @@ class WordFiller:
             if domain == 0:
                 break
         return domain
+
+    def mask_for_minimum_score(self, length: int, minimum_score: float) -> int:
+        """Return a cached bitset containing words at or above ``minimum_score``."""
+        key = (length, float(minimum_score))
+        if key not in self.minimum_score_masks:
+            mask = 0
+            for word_id, score in enumerate(
+                self.word_scores_by_length.get(length, ())
+            ):
+                if score >= minimum_score:
+                    mask |= 1 << word_id
+            self.minimum_score_masks[key] = mask
+        return self.minimum_score_masks[key]
 
     def iter_word_ids(self, domain: int) -> Iterator[int]:
         """Yield set-bit indexes from a domain, least-significant bit first."""

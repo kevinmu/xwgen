@@ -31,6 +31,9 @@ test("server-renders the XWGen constructor", async () => {
   assert.match(html, /Clue needed/);
   assert.match(html, /Candidate fill/);
   assert.match(html, /Score/);
+  assert.match(html, /50\+ then relax/);
+  assert.match(html, /Strict 50\+/);
+  assert.match(html, /All words/);
   assert.match(html, /Airy · ~12%/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/);
 });

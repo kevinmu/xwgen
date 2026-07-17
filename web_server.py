@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 from layout_generator import generate_layout
 from puzzle import Puzzle
-from puzzle_filler import PuzzleFiller, SolverConfig
+from puzzle_filler import QUALITY_MODE_CUTOFFS, PuzzleFiller, SolverConfig
 from word_filler import WordFiller
 
 
@@ -234,6 +234,9 @@ def fill_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
     options = payload.get("options", {})
     if not isinstance(options, Mapping):
         options = {}
+    quality_mode = str(options.get("qualityMode", "balanced")).lower()
+    if quality_mode not in QUALITY_MODE_CUTOFFS:
+        raise PayloadError("Fill quality mode must be balanced, strict, or open")
 
     config = SolverConfig(
         timeout_seconds=max(1.0, min(float(options.get("timeout", 20)), 120.0)),
@@ -242,6 +245,7 @@ def fill_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
         ),
         restarts=max(1, min(int(options.get("restarts", 4)), 20)),
         random_seed=int(options.get("seed", 0)),
+        quality_cutoffs=QUALITY_MODE_CUTOFFS[quality_mode],
     )
     result = PuzzleFiller(
         word_filler=candidate_dictionary(),
@@ -257,6 +261,8 @@ def fill_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
         "propagations": result.propagations,
         "attempts": result.attempts,
         "elapsedSeconds": result.elapsed_seconds,
+        "minimumScore": result.minimum_score,
+        "qualityMode": quality_mode,
     }
     response["warnings"] = shape_warnings(puzzle)
     return response

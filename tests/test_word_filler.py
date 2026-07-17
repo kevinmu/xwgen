@@ -49,6 +49,15 @@ class WordFillerTest(TestCase):
             50.0,
             word_filler.quality_score(3, word_filler.word_id("CAT")),
         )
+        self.assertEqual(
+            ["CAT"],
+            list(
+                word_filler.iter_words(
+                    3,
+                    word_filler.domain_for_pattern("...", minimum_score=50),
+                )
+            ),
+        )
 
     def test_rejects_pattern_characters_outside_standard_crossword_fill(self):
         self.words_file.write_text("CAT\n", encoding="utf-8")

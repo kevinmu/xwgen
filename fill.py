@@ -6,7 +6,12 @@ import argparse
 from pathlib import Path
 
 from puzzle import Puzzle
-from puzzle_filler import FillStatus, PuzzleFiller, SolverConfig
+from puzzle_filler import (
+    QUALITY_MODE_CUTOFFS,
+    FillStatus,
+    PuzzleFiller,
+    SolverConfig,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +39,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--timeout", type=float, default=30.0, help="overall timeout in seconds"
     )
     parser.add_argument(
+        "--quality-mode",
+        choices=tuple(QUALITY_MODE_CUTOFFS),
+        default="balanced",
+        help="balanced tries 50+, then 40+, then all words (default: balanced)",
+    )
+    parser.add_argument(
         "--nodes-per-restart",
         type=int,
         default=50_000,
@@ -57,6 +68,7 @@ def main() -> int:
         max_nodes_per_restart=args.nodes_per_restart,
         restarts=args.restarts,
         random_seed=args.seed,
+        quality_cutoffs=QUALITY_MODE_CUTOFFS[args.quality_mode],
     )
     filler = PuzzleFiller(
         args.wordlist,

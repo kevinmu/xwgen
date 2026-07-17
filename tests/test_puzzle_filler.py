@@ -98,6 +98,56 @@ class PuzzleFillerTest(TestCase):
 
         self.assertEqual(FillStatus.SOLVED, result.status)
         self.assertEqual(high_quality_grid, set(result.assignments.values()))
+        self.assertEqual(50.0, result.minimum_score)
+
+    def test_relaxes_to_the_next_quality_tier(self):
+        words = {"AB", "CD", "AC", "BD"}
+        puzzle = Puzzle(2, 2)
+        puzzle.initialize()
+        filler = self.make_filler(
+            sorted(words),
+            scores={word: 45.0 for word in words},
+        )
+
+        result = filler.fill_puzzle(puzzle)
+
+        self.assertEqual(FillStatus.SOLVED, result.status)
+        self.assertEqual(40.0, result.minimum_score)
+        self.assertIn("relaxing", result.message)
+
+    def test_strict_quality_mode_can_report_unsatisfiable(self):
+        words = {"AB", "CD", "AC", "BD"}
+        puzzle = Puzzle(2, 2)
+        puzzle.initialize()
+        filler = self.make_filler(
+            sorted(words),
+            scores={word: 45.0 for word in words},
+            quality_cutoffs=(50.0,),
+        )
+
+        result = filler.fill_puzzle(puzzle)
+
+        self.assertEqual(FillStatus.UNSAT, result.status)
+        self.assertEqual({}, result.assignments)
+
+    def test_strict_mode_preserves_complete_locked_answers(self):
+        words = {"AB", "CD", "AC", "BD"}
+        puzzle = Puzzle(2, 2)
+        for row, answer in enumerate(("AB", "CD")):
+            for col, letter in enumerate(answer):
+                puzzle.grid[row][col].letter = letter
+        puzzle.initialize()
+        filler = self.make_filler(
+            sorted(words),
+            scores={word: 10.0 for word in words},
+            quality_cutoffs=(50.0,),
+        )
+
+        result = filler.fill_puzzle(puzzle)
+
+        self.assertEqual(FillStatus.SOLVED, result.status)
+        self.assertEqual(50.0, result.minimum_score)
+        self.assertEqual(words, set(result.assignments.values()))
 
     def test_budget_cutoff_returns_timeout_and_leaves_the_grid_unchanged(self):
         puzzle = Puzzle(3, 3)

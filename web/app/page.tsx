@@ -12,6 +12,7 @@ import {
 
 type Direction = "A" | "D";
 type LayoutProfile = "airy" | "classic" | "dense";
+type QualityMode = "balanced" | "strict" | "open";
 
 type Cell = {
   black: boolean;
@@ -60,6 +61,8 @@ type FillStats = {
   propagations: number;
   attempts: number;
   elapsedSeconds: number;
+  minimumScore: number | null;
+  qualityMode: QualityMode;
 };
 
 type LexiconMetadata = {
@@ -218,6 +221,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [layoutBusy, setLayoutBusy] = useState(false);
   const [layoutProfile, setLayoutProfile] = useState<LayoutProfile>("classic");
+  const [qualityMode, setQualityMode] = useState<QualityMode>("balanced");
   const [status, setStatus] = useState("Loading the sample puzzle…");
   const [warnings, setWarnings] = useState<string[]>([]);
   const [stats, setStats] = useState<FillStats | null>(null);
@@ -518,7 +522,13 @@ export default function Home() {
         signal: controller.signal,
         body: JSON.stringify({
           ...buildPayload(),
-          options: { timeout: 30, nodesPerRestart: 50000, restarts: 4, seed: 0 },
+          options: {
+            timeout: 30,
+            nodesPerRestart: 50000,
+            restarts: 4,
+            seed: 0,
+            qualityMode,
+          },
         }),
       });
       const data = (await response.json()) as PuzzlePayload & { error?: string };
@@ -532,7 +542,9 @@ export default function Home() {
           });
           return next;
         });
-        setStatus(`Fill complete in ${data.result.elapsedSeconds.toFixed(2)} seconds.`);
+        setStatus(
+          `${data.result.message}. ${data.result.elapsedSeconds.toFixed(2)} seconds.`,
+        );
       } else {
         setStatus(data.result?.message || "No valid fill was found.");
       }
@@ -786,6 +798,18 @@ export default function Home() {
               <span className="switch" aria-hidden="true" />
               180° symmetry
             </label>
+            <label className="quality-mode-select">
+              <span>Fill quality</span>
+              <select
+                value={qualityMode}
+                onChange={(event) => setQualityMode(event.target.value as QualityMode)}
+                disabled={busy}
+              >
+                <option value="balanced">50+ then relax</option>
+                <option value="strict">Strict 50+</option>
+                <option value="open">All words</option>
+              </select>
+            </label>
             <div className="history-actions">
               <button type="button" onClick={undo} disabled={!past.length} aria-label="Undo" title="Undo">↶</button>
               <button type="button" onClick={redo} disabled={!future.length} aria-label="Redo" title="Redo">↷</button>
@@ -996,7 +1020,22 @@ export default function Home() {
       <section className="run-bar" aria-live="polite">
         <div className="run-status">
           <span className={`run-indicator ${busy ? "searching" : stats?.status === "solved" ? "solved" : ""}`} aria-hidden="true" />
-          <div><p>{status}</p>{stats ? <small>{stats.nodes.toLocaleString()} nodes · {stats.backjumps.toLocaleString()} backjumps · {stats.propagations.toLocaleString()} propagations</small> : <small>Unlocked letters are replaced on the next fill.</small>}</div>
+          <div>
+            <p>{status}</p>
+            {stats ? (
+              <small>
+                {stats.status === "solved"
+                  ? stats.minimumScore === null
+                    ? "open tier"
+                    : `${stats.minimumScore}+ tier`
+                  : `${stats.qualityMode} mode`} ·{" "}
+                {stats.nodes.toLocaleString()} nodes · {stats.backjumps.toLocaleString()} backjumps ·{" "}
+                {stats.propagations.toLocaleString()} propagations
+              </small>
+            ) : (
+              <small>Unlocked letters are replaced on the next fill.</small>
+            )}
+          </div>
         </div>
         {warnings.length ? <span className="warning-count" title={warnings.join("\n")}>{warnings.length} grid {warnings.length === 1 ? "warning" : "warnings"}</span> : null}
         <div className="run-actions">

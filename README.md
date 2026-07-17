@@ -123,8 +123,20 @@ licensed but unscored 2021 Crossword Nexus list.
 
 Spread the Word(list) scores are built directly into its `WORD;SCORE` file.
 The solver prioritizes higher-scored candidates, and the constructor displays
-those scores in quality-ranked candidate results. You can still supply a UTF-8
-TSV or semicolon-separated override file:
+those scores in quality-ranked candidate results. The default balanced fill
+policy first requires a score of 50+, then widens to 40+, and finally allows the
+full list if needed. The constructor also offers strict 50+ and unrestricted
+modes. Fully entered seed/theme answers are preserved even below the active
+floor; the floor applies only to entries the solver can replace.
+
+The same modes are available from the command line:
+
+```powershell
+python fill.py puzz1.out --quality-mode balanced --output filled.out
+python fill.py puzz1.out --quality-mode strict --output filled.out
+```
+
+You can still supply a UTF-8 TSV or semicolon-separated override file:
 
 ```text
 # WORD<TAB>SCORE
@@ -136,10 +148,12 @@ CROSSWORDESE	-5
 python fill.py puzz1.out --scores word_scores.tsv --output filled.out
 ```
 
-Scores are combined with the least-constraining-value score. Higher values are
-preferred, while every dictionary candidate remains available if backtracking
-needs it. The standard solver accepts A-Z fill; malformed, rebus, numeric, and
-slash-separated entries are filtered when the dictionary is loaded. See
+Within each active tier, scores are combined with the
+least-constraining-value score so higher values are preferred. In balanced
+mode, candidates below the floor become available only when the solver widens
+to a later tier. The standard solver accepts A-Z fill; malformed, rebus,
+numeric, and slash-separated entries are filtered when the dictionary is
+loaded. See
 [`TODO.md`](TODO.md) for the planned optional AI-assisted scoring pipeline.
 
 ## Solver outline

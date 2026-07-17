@@ -22,6 +22,13 @@ class FillStatus(Enum):
     TIMEOUT = "timeout"
 
 
+QUALITY_MODE_CUTOFFS: Mapping[str, Tuple[Optional[float], ...]] = {
+    "balanced": (50.0, 40.0, None),
+    "strict": (50.0,),
+    "open": (None,),
+}
+
+
 @dataclass(frozen=True)
 class SolverConfig:
     """Search limits and deterministic value-ordering controls."""
@@ -31,6 +38,7 @@ class SolverConfig:
     restarts: int = 4
     random_seed: int = 0
     quality_weight: float = 1.0
+    quality_cutoffs: Tuple[Optional[float], ...] = (50.0, 40.0, None)
 
     def __post_init__(self) -> None:
         if self.timeout_seconds <= 0:
@@ -39,6 +47,19 @@ class SolverConfig:
             raise ValueError("max_nodes_per_restart cannot be negative")
         if self.restarts < 1:
             raise ValueError("restarts must be at least 1")
+        if not self.quality_cutoffs:
+            raise ValueError("quality_cutoffs cannot be empty")
+        if any(
+            cutoff is not None and cutoff < 0 for cutoff in self.quality_cutoffs
+        ):
+            raise ValueError("quality cutoffs cannot be negative")
+        if None in self.quality_cutoffs[:-1]:
+            raise ValueError("an unrestricted quality tier must be last")
+        numeric_cutoffs = [
+            cutoff for cutoff in self.quality_cutoffs if cutoff is not None
+        ]
+        if numeric_cutoffs != sorted(numeric_cutoffs, reverse=True):
+            raise ValueError("quality cutoffs must be ordered from highest to lowest")
 
 
 @dataclass(frozen=True)
@@ -52,6 +73,7 @@ class FillResult:
     attempts: int
     elapsed_seconds: float
     message: str = ""
+    minimum_score: Optional[float] = None
 
     @property
     def solved(self) -> bool:
@@ -78,6 +100,14 @@ class _SearchOutcome:
     solution: Optional[Dict[str, int]] = None
     conflict: Set[str] = field(default_factory=set)
     cutoff: bool = False
+
+
+@dataclass
+class _TierOutcome:
+    status: FillStatus
+    attempts: int
+    solution: Optional[Dict[str, int]] = None
+    message: str = ""
 
 
 class PuzzleFiller:
@@ -124,76 +154,148 @@ class PuzzleFiller:
         """Fill ``puzzle`` or report that it is unsatisfiable/timed out."""
         active_config = config or self.config
         started_at = time.perf_counter()
-        self._deadline = started_at + active_config.timeout_seconds
+        overall_deadline = started_at + active_config.timeout_seconds
         self._stats = _SearchStats()
         self._prepare_structure(puzzle)
+        attempts = 0
+        last_outcome: Optional[_TierOutcome] = None
+        tiers = active_config.quality_cutoffs
 
-        domains = {
-            slot: self.word_filler.domain_for_pattern(entry.get_current_hint())
-            for slot, entry in self._entries.items()
-        }
+        for tier_index, minimum_score in enumerate(tiers):
+            now = time.perf_counter()
+            if now >= overall_deadline:
+                break
+            remaining_tiers = len(tiers) - tier_index
+            self._deadline = (
+                overall_deadline
+                if remaining_tiers == 1
+                else now + (overall_deadline - now) / remaining_tiers
+            )
+            tier_outcome = self._fill_quality_tier(
+                active_config,
+                minimum_score,
+                seed_offset=tier_index * active_config.restarts,
+            )
+            attempts += tier_outcome.attempts
+            last_outcome = tier_outcome
+
+            if tier_outcome.solution is not None:
+                assignments = self._decode_solution(tier_outcome.solution)
+                self._validate_solution(assignments)
+                self._apply_solution(assignments)
+                return self._result(
+                    FillStatus.SOLVED,
+                    assignments,
+                    attempts,
+                    started_at,
+                    self._quality_tier_message(minimum_score, tier_index),
+                    minimum_score=minimum_score,
+                )
+
+        if time.perf_counter() >= overall_deadline or (
+            last_outcome is not None and last_outcome.status is FillStatus.TIMEOUT
+        ):
+            return self._result(
+                FillStatus.TIMEOUT,
+                {},
+                attempts,
+                started_at,
+                "Search budget exhausted; the puzzle was left unchanged",
+            )
+
+        message = (
+            last_outcome.message
+            if len(tiers) == 1 and last_outcome is not None
+            else "No valid fill was found after trying every quality tier"
+        )
+        return self._result(
+            FillStatus.UNSAT,
+            {},
+            attempts,
+            started_at,
+            message,
+        )
+
+    def _fill_quality_tier(
+        self,
+        config: SolverConfig,
+        minimum_score: Optional[float],
+        *,
+        seed_offset: int,
+    ) -> _TierOutcome:
+        domains = {}
+        for slot, entry in self._entries.items():
+            pattern = entry.get_current_hint()
+            # A complete answer represents an explicit user lock/theme answer and is
+            # preserved even when its editorial score is below this tier.
+            score_floor = minimum_score if "." in pattern else None
+            domains[slot] = self.word_filler.domain_for_pattern(
+                pattern,
+                minimum_score=score_floor,
+            )
+
         empty_slots = [slot for slot, domain in domains.items() if domain == 0]
         if empty_slots:
-            return self._result(
+            return _TierOutcome(
                 FillStatus.UNSAT,
-                {},
                 0,
-                started_at,
-                f"No dictionary candidates for: {', '.join(sorted(empty_slots))}",
+                message=f"No dictionary candidates for: {', '.join(sorted(empty_slots))}",
             )
 
         reasons = {slot: set() for slot in domains}
         initial_conflict = self._propagate(domains, reasons)
         if initial_conflict is not None:
-            return self._result(
+            return _TierOutcome(
                 FillStatus.UNSAT,
-                {},
                 0,
-                started_at,
-                "Initial letters and crossword constraints are inconsistent",
+                message="Initial letters and crossword constraints are inconsistent",
             )
 
         attempts = 0
-        for attempt in range(active_config.restarts):
+        for attempt in range(config.restarts):
             if time.perf_counter() >= self._deadline:
                 break
             attempts = attempt + 1
             self._attempt_nodes = 0
-            rng = random.Random(active_config.random_seed + attempt)
+            rng = random.Random(config.random_seed + seed_offset + attempt)
             attempt_domains = domains.copy()
             attempt_reasons = {slot: set(reason) for slot, reason in reasons.items()}
             outcome = self._search(
                 attempt_domains,
                 attempt_reasons,
                 rng,
-                active_config,
+                config,
             )
             if outcome.solution is not None:
-                assignments = self._decode_solution(outcome.solution)
-                self._validate_solution(assignments)
-                self._apply_solution(assignments)
-                return self._result(
+                return _TierOutcome(
                     FillStatus.SOLVED,
-                    assignments,
-                    attempt + 1,
-                    started_at,
+                    attempts,
+                    solution=outcome.solution,
                 )
             if not outcome.cutoff:
-                return self._result(
+                return _TierOutcome(
                     FillStatus.UNSAT,
-                    {},
-                    attempt + 1,
-                    started_at,
-                    "The search space was exhausted without a valid fill",
+                    attempts,
+                    message="The search space was exhausted without a valid fill",
                 )
 
-        return self._result(
+        return _TierOutcome(
             FillStatus.TIMEOUT,
-            {},
             attempts,
-            started_at,
-            "Search budget exhausted; the puzzle was left unchanged",
+            message="This quality tier exhausted its search budget",
         )
+
+    @staticmethod
+    def _quality_tier_message(
+        minimum_score: Optional[float],
+        tier_index: int,
+    ) -> str:
+        if minimum_score is None:
+            return "Solved after allowing the full quality-ranked word list"
+        score = f"{minimum_score:g}+"
+        if tier_index == 0:
+            return f"Solved with a {score} minimum for replaceable entries"
+        return f"Solved after relaxing replaceable entries to a {score} minimum"
 
     # Compatibility entry points now use the sound CSP solver.
     def fill_puzzle_using_backtracking(self, puzzle: Puzzle) -> FillResult:
@@ -495,6 +597,8 @@ class PuzzleFiller:
         attempts: int,
         started_at: float,
         message: str = "",
+        *,
+        minimum_score: Optional[float] = None,
     ) -> FillResult:
         return FillResult(
             status=status,
@@ -506,4 +610,5 @@ class PuzzleFiller:
             attempts=attempts,
             elapsed_seconds=time.perf_counter() - started_at,
             message=message,
+            minimum_score=minimum_score,
         )

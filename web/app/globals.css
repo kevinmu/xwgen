@@ -203,6 +203,19 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
 .switch-label input:checked + .switch { background: var(--blue); }
 .switch-label input:checked + .switch::after { transform: translateX(14px); }
 
+.quality-mode-select { display: grid; gap: 2px; }
+.quality-mode-select > span { color: var(--muted); font-size: 8px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.quality-mode-select select {
+  height: 30px;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: white;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 750;
+}
+
 .history-actions { margin-left: auto; gap: 5px; }
 .history-actions button {
   width: 34px;
@@ -496,6 +509,7 @@ button:disabled { opacity: 0.42; cursor: not-allowed; }
   .grid-workbench { padding: 10px; }
   .tool-rail { flex-wrap: wrap; }
   .switch-label { order: 3; width: 100%; }
+  .quality-mode-select { margin-left: auto; }
   .layout-rail { align-items: stretch; flex-wrap: wrap; }
   .layout-label { flex: 1 1 100%; }
   .density-select { flex: 1; }

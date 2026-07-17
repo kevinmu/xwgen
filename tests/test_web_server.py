@@ -5,6 +5,7 @@ from puzzle import Puzzle
 from web_server import (
     PayloadError,
     candidate_response,
+    fill_response,
     layout_response,
     puzzle_from_payload,
     serialize_puzzle,
@@ -47,6 +48,12 @@ class WebServerPayloadTest(TestCase):
 
         with self.assertRaises(PayloadError):
             puzzle_from_payload(self.payload)
+
+    def test_rejects_an_unknown_fill_quality_mode(self):
+        self.payload["options"] = {"qualityMode": "mystery"}
+
+        with self.assertRaises(PayloadError):
+            fill_response(self.payload)
 
     def test_returns_candidates_for_selected_entry(self):
         for column, letter in enumerate("THUS"):
