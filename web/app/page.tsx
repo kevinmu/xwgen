@@ -731,10 +731,6 @@ export default function Home() {
 
   const activeCellSet = new Set(activeEntry?.cells.map(([r, c]) => `${r}:${c}`) ?? []);
   const selectedCell = `${selected[0]}:${selected[1]}`;
-  const lockedCount = grid.flat().filter((cell) => cell.locked).length;
-  const filledCount = grid.flat().filter((cell) => !cell.black && cell.letter).length;
-  const openCount = grid.flat().filter((cell) => !cell.black).length;
-
   return (
     <main className="app-shell">
       <header className="masthead">
@@ -756,39 +752,37 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="title-strip" aria-label="Puzzle details">
-        <label>
-          <span>Title</span>
-          <input
-            value={metadata.title}
-            onChange={(event) => setMetadata((current) => ({ ...current, title: event.target.value }))}
-            aria-label="Puzzle title"
-          />
-        </label>
-        <label>
-          <span>Constructor</span>
-          <input
-            value={metadata.author}
-            placeholder="Your name"
-            onChange={(event) => setMetadata((current) => ({ ...current, author: event.target.value }))}
-            aria-label="Puzzle constructor"
-          />
-        </label>
-        <div className={`engine-state ${engine}`}>
-          <span className="state-dot" aria-hidden="true" />
-          {engine === "ready"
-            ? lexicon?.scored
-              ? "Scored lexicon ready"
-              : "Unscored fallback"
-            : engine === "checking"
-              ? "Connecting…"
-              : "Editor only"}
-        </div>
-      </section>
-
       <div className="workspace">
-        <section className="grid-workbench" aria-label="Crossword grid editor">
-          <div className="tool-rail">
+        <aside className="left-rail" aria-label="Puzzle setup">
+          <section className="left-panel-section puzzle-fields">
+            <p className="eyebrow">Puzzle details</p>
+            <label>
+              <span>Title</span>
+              <input
+                value={metadata.title}
+                onChange={(event) => setMetadata((current) => ({ ...current, title: event.target.value }))}
+                aria-label="Puzzle title"
+              />
+            </label>
+            <label>
+              <span>Constructor</span>
+              <input
+                value={metadata.author}
+                placeholder="Your name"
+                onChange={(event) => setMetadata((current) => ({ ...current, author: event.target.value }))}
+                aria-label="Puzzle constructor"
+              />
+            </label>
+          </section>
+
+          <section className="left-panel-section edit-controls">
+            <div className="left-section-heading">
+              <p className="eyebrow">Edit grid</p>
+              <div className="history-actions">
+                <button type="button" onClick={undo} disabled={!past.length} aria-label="Undo" title="Undo">↶</button>
+                <button type="button" onClick={redo} disabled={!future.length} aria-label="Redo" title="Redo">↷</button>
+              </div>
+            </div>
             <div className="segmented-control" aria-label="Grid editing tool">
               <button className={tool === "type" ? "active" : ""} type="button" onClick={() => setTool("type")}>Type</button>
               <button className={tool === "block" ? "active" : ""} type="button" onClick={() => setTool("block")}>Blocks</button>
@@ -798,31 +792,13 @@ export default function Home() {
               <span className="switch" aria-hidden="true" />
               180° symmetry
             </label>
-            <label className="quality-mode-select">
-              <span>Fill quality</span>
-              <select
-                value={qualityMode}
-                onChange={(event) => setQualityMode(event.target.value as QualityMode)}
-                disabled={busy}
-              >
-                <option value="balanced">50+ then relax</option>
-                <option value="strict">Strict 50+</option>
-                <option value="open">All words</option>
-              </select>
-            </label>
-            <div className="history-actions">
-              <button type="button" onClick={undo} disabled={!past.length} aria-label="Undo" title="Undo">↶</button>
-              <button type="button" onClick={redo} disabled={!future.length} aria-label="Redo" title="Redo">↷</button>
-            </div>
-          </div>
+          </section>
 
-          <div className="layout-rail">
-            <div className="layout-label">
-              <p className="eyebrow">Block layout</p>
-              <span>Symmetric · connected · 3+ letter entries</span>
-            </div>
-            <label className="density-select">
-              <span className="visually-hidden">Block density</span>
+          <section className="left-panel-section block-layout-controls">
+            <p className="eyebrow">Block layout</p>
+            <p className="control-note">Symmetric · connected · 3+ letter entries</p>
+            <label className="select-control">
+              <span>Block density</span>
               <select
                 value={layoutProfile}
                 onChange={(event) => setLayoutProfile(event.target.value as LayoutProfile)}
@@ -841,7 +817,37 @@ export default function Home() {
             >
               {layoutBusy ? "Generating…" : "Generate layout"}
             </button>
+          </section>
+
+          <section className="left-panel-section fill-controls">
+            <p className="eyebrow">Fill options</p>
+            <label className="select-control">
+              <span>Word quality</span>
+              <select
+                value={qualityMode}
+                onChange={(event) => setQualityMode(event.target.value as QualityMode)}
+                disabled={busy}
+              >
+                <option value="balanced">50+ then relax</option>
+                <option value="strict">Strict 50+</option>
+                <option value="open">All words</option>
+              </select>
+            </label>
+          </section>
+
+          <div className={`engine-state ${engine}`}>
+            <span className="state-dot" aria-hidden="true" />
+            {engine === "ready"
+              ? lexicon?.scored
+                ? "Scored lexicon ready"
+                : "Unscored fallback"
+              : engine === "checking"
+                ? "Connecting…"
+                : "Editor only"}
           </div>
+        </aside>
+
+        <section className="grid-workbench" aria-label="Crossword grid editor">
 
           <div
             className={`crossword-grid ${tool === "block" ? "block-mode" : ""}`}
@@ -872,11 +878,6 @@ export default function Home() {
             )}
           </div>
 
-          <div className="grid-caption">
-            <span>{filledCount}/{openCount} letters</span>
-            <span>{lockedCount} locked</span>
-            <span>{entries.length} entries</span>
-          </div>
         </section>
 
         <aside className="right-rail" aria-label="Entry editor and puzzle clues">
