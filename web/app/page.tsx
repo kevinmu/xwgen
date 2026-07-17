@@ -754,12 +754,13 @@ export default function Home() {
 
           <section className="left-panel-section edit-controls">
             <div className="left-section-heading">
-              <p className="eyebrow">Edit grid</p>
+              <p className="eyebrow">Grid tools</p>
               <div className="history-actions">
                 <button type="button" onClick={undo} disabled={!past.length} aria-label="Undo" title="Undo">↶</button>
                 <button type="button" onClick={redo} disabled={!future.length} aria-label="Redo" title="Redo">↷</button>
               </div>
             </div>
+            <p className="control-note">Enter letters or draw black squares.</p>
             <div className="segmented-control" aria-label="Grid editing tool">
               <button className={tool === "type" ? "active" : ""} type="button" onClick={() => setTool("type")}>Type</button>
               <button className={tool === "block" ? "active" : ""} type="button" onClick={() => setTool("block")}>Blocks</button>
@@ -767,13 +768,13 @@ export default function Home() {
             <label className="switch-label">
               <input type="checkbox" checked={symmetry} onChange={(event) => setSymmetry(event.target.checked)} />
               <span className="switch" aria-hidden="true" />
-              180° symmetry
+              180° rotational symmetry
             </label>
           </section>
 
           <section className="left-panel-section block-layout-controls">
-            <p className="eyebrow">Block layout</p>
-            <p className="control-note">Symmetric · connected · 3+ letter entries</p>
+            <p className="eyebrow">Automatic layout</p>
+            <p className="control-note">Build a connected, symmetric grid with 3+ letter entries.</p>
             <label className="select-control">
               <span>Block density</span>
               <select
@@ -792,14 +793,14 @@ export default function Home() {
               onClick={generateBlockLayout}
               disabled={engine !== "ready" || layoutBusy || busy}
             >
-              {layoutBusy ? "Generating…" : "Generate layout"}
+              {layoutBusy ? "Generating…" : "Generate new layout"}
             </button>
           </section>
 
           <section className="left-panel-section fill-controls">
-            <p className="eyebrow">Fill options</p>
+            <p className="eyebrow">Fill quality</p>
             <label className="select-control">
-              <span>Word quality</span>
+              <span>Dictionary policy</span>
               <select
                 value={qualityMode}
                 onChange={(event) => setQualityMode(event.target.value as QualityMode)}
@@ -810,6 +811,17 @@ export default function Home() {
                 <option value="open">All words</option>
               </select>
             </label>
+            <p className="control-note quality-note">
+              {qualityMode === "balanced"
+                ? "Start at 50+, then widen only when the grid needs it."
+                : qualityMode === "strict"
+                  ? "Use only replaceable entries scored 50 or higher."
+                  : "Allow the full word list immediately."}
+            </p>
+            <div className="cell-state-key" aria-label="Cell color key">
+              <span><i className="provisional" aria-hidden="true" />In progress</span>
+              <span><i className="locked" aria-hidden="true" />Locked</span>
+            </div>
           </section>
 
           <div className={`engine-state ${engine}`}>
