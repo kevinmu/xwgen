@@ -23,6 +23,8 @@ test("server-renders the XWGen constructor", async () => {
   assert.match(html, /XWGen Studio/);
   assert.match(html, /Crossword constructor/);
   assert.match(html, /Fill grid/);
+  assert.match(html, /Theme wizard/);
+  assert.match(html, /aria-haspopup="dialog"/);
   assert.match(html, /header-fill-button[\s\S]*Fill grid[\s\S]*New grid/);
   assert.match(html, /Generate new layout/);
   assert.match(html, /Puzzle setup/);

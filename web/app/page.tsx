@@ -13,6 +13,7 @@ import {
 type Direction = "A" | "D";
 type LayoutProfile = "airy" | "classic" | "dense";
 type QualityMode = "balanced" | "strict" | "open";
+type ThemeCount = 4 | 5 | 6;
 
 type Cell = {
   black: boolean;
@@ -83,6 +84,11 @@ type CandidateResponse = {
     inLexicon: boolean;
   } | null;
   lexicon: LexiconMetadata;
+};
+
+type ThemeAnswerDraft = {
+  entry: Entry;
+  answer: string;
 };
 
 const API_BASE =
@@ -161,6 +167,84 @@ function makeEntry(
   };
 }
 
+const entryCellsKey = (cells: Array<[number, number]>): string =>
+  cells
+    .map(([row, col]) => `${row}:${col}`)
+    .sort()
+    .join("|");
+
+function suggestThemeEntries(
+  entries: Entry[],
+  rows: number,
+  cols: number,
+  requested: ThemeCount,
+): Entry[] {
+  const allAcross = entries.filter((entry) => entry.direction === "A");
+  const longAcross = allAcross.filter((entry) => entry.length >= 5);
+  const pool = longAcross.length >= requested ? longAcross : allAcross;
+  const entriesByCells = new Map(
+    pool.map((entry) => [entryCellsKey(entry.cells), entry]),
+  );
+  const pairs: Array<[Entry, Entry]> = [];
+  const centralEntries: Entry[] = [];
+  const paired = new Set<string>();
+
+  for (const entry of pool) {
+    const mirroredKey = entryCellsKey(
+      entry.cells.map(([row, col]) => [rows - 1 - row, cols - 1 - col]),
+    );
+    const counterpart = entriesByCells.get(mirroredKey);
+    if (!counterpart || counterpart.length !== entry.length) continue;
+    if (counterpart.id === entry.id) {
+      centralEntries.push(entry);
+      continue;
+    }
+    if (paired.has(entry.id) || paired.has(counterpart.id)) continue;
+    pairs.push([entry, counterpart]);
+    paired.add(entry.id);
+    paired.add(counterpart.id);
+  }
+
+  pairs.sort(
+    (left, right) =>
+      right[0].length - left[0].length ||
+      Math.min(left[0].row, left[1].row) - Math.min(right[0].row, right[1].row),
+  );
+  centralEntries.sort(
+    (left, right) => right.length - left.length || left.row - right.row,
+  );
+
+  const selected: Entry[] = [];
+  const selectedIds = new Set<string>();
+  const add = (entry: Entry | undefined) => {
+    if (!entry || selectedIds.has(entry.id) || selected.length >= requested) return;
+    selected.push(entry);
+    selectedIds.add(entry.id);
+  };
+
+  for (const pair of pairs.slice(0, Math.floor(requested / 2))) {
+    add(pair[0]);
+    add(pair[1]);
+  }
+  if (requested % 2 === 1) add(centralEntries[0]);
+
+  const centerRow = (rows - 1) / 2;
+  const fallbacks = [...pool].sort(
+    (left, right) =>
+      right.length - left.length ||
+      Math.abs(left.row - centerRow) - Math.abs(right.row - centerRow) ||
+      left.row - right.row,
+  );
+  for (const entry of fallbacks) add(entry);
+
+  return selected
+    .slice(0, requested)
+    .sort((left, right) => left.row - right.row || left.col - right.col);
+}
+
+const normalizeThemeAnswer = (value: string): string =>
+  value.toUpperCase().replace(/[^A-Z]/g, "");
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -227,6 +311,11 @@ export default function Home() {
   const [candidateLoading, setCandidateLoading] = useState(false);
   const [past, setPast] = useState<Cell[][][]>([]);
   const [future, setFuture] = useState<Cell[][][]>([]);
+  const [themeWizardOpen, setThemeWizardOpen] = useState(false);
+  const [themeStep, setThemeStep] = useState<1 | 2 | 3>(1);
+  const [themeCount, setThemeCount] = useState<ThemeCount>(4);
+  const [themeDrafts, setThemeDrafts] = useState<ThemeAnswerDraft[]>([]);
+  const [themeError, setThemeError] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const layoutSeedRef = useRef(0);
@@ -496,7 +585,7 @@ export default function Home() {
     commitGrid(next);
   };
 
-  const fillGrid = async () => {
+  const fillGrid = async (gridOverride?: Cell[][]) => {
     if (engine !== "ready" || busy) return;
     const controller = new AbortController();
     abortRef.current = controller;
@@ -508,6 +597,7 @@ export default function Home() {
         signal: controller.signal,
         body: JSON.stringify({
           ...buildPayload(),
+          ...(gridOverride ? { cells: gridOverride, clues: {} } : {}),
           options: {
             timeout: 30,
             nodesPerRestart: 50000,
@@ -520,14 +610,24 @@ export default function Home() {
       const data = (await response.json()) as PuzzlePayload & { error?: string };
       if (!response.ok) throw new Error(data.error || "Fill request failed");
       if (data.result?.status === "solved") {
-        commitGrid(data.cells);
-        setClues((current) => {
-          const next = { ...current };
-          data.entries?.forEach((entry) => {
-            next[entry.id] = entry.clue;
+        if (gridOverride) {
+          setGrid(data.cells);
+          setFuture([]);
+          setClues(
+            Object.fromEntries(
+              (data.entries ?? []).map((entry) => [entry.id, entry.clue]),
+            ),
+          );
+        } else {
+          commitGrid(data.cells);
+          setClues((current) => {
+            const next = { ...current };
+            data.entries?.forEach((entry) => {
+              next[entry.id] = entry.clue;
+            });
+            return next;
           });
-          return next;
-        });
+        }
       } else {
         window.alert(data.result?.message || "No valid fill was found.");
       }
@@ -540,6 +640,98 @@ export default function Home() {
   };
 
   const stopFill = () => abortRef.current?.abort();
+
+  const createThemeDrafts = (count: ThemeCount): ThemeAnswerDraft[] =>
+    suggestThemeEntries(entries, grid.length, grid[0]?.length ?? 0, count).map(
+      (entry) => ({ entry, answer: "" }),
+    );
+
+  const openThemeWizard = () => {
+    const drafts = createThemeDrafts(themeCount);
+    setThemeDrafts(drafts);
+    setThemeStep(1);
+    setThemeError(
+      drafts.length === themeCount
+        ? ""
+        : "This layout does not have enough Across entries for that many theme answers.",
+    );
+    setThemeWizardOpen(true);
+  };
+
+  const changeThemeCount = (count: ThemeCount) => {
+    const drafts = createThemeDrafts(count);
+    setThemeCount(count);
+    setThemeDrafts(drafts);
+    setThemeError(
+      drafts.length === count
+        ? ""
+        : "This layout does not have enough Across entries for that many theme answers.",
+    );
+  };
+
+  const validateThemeAnswers = (): boolean => {
+    if (themeDrafts.length !== themeCount) {
+      setThemeError("Choose a layout with enough Across entries for your themes.");
+      return false;
+    }
+    const incomplete = themeDrafts.find(
+      ({ entry, answer }) => normalizeThemeAnswer(answer).length !== entry.length,
+    );
+    if (incomplete) {
+      setThemeError(
+        `${incomplete.entry.number} Across needs exactly ${incomplete.entry.length} letters.`,
+      );
+      return false;
+    }
+    const answers = themeDrafts.map(({ answer }) => normalizeThemeAnswer(answer));
+    if (new Set(answers).size !== answers.length) {
+      setThemeError("Use a different answer for each theme slot.");
+      return false;
+    }
+    setThemeError("");
+    return true;
+  };
+
+  const reviewThemeAnswers = () => {
+    if (validateThemeAnswers()) setThemeStep(3);
+  };
+
+  const placeThemesAndFill = () => {
+    if (!validateThemeAnswers()) {
+      setThemeStep(2);
+      return;
+    }
+    const hasLetters = grid.some((row) => row.some((cell) => Boolean(cell.letter)));
+    if (
+      hasLetters &&
+      !window.confirm(
+        "Place these theme answers? Existing letters and clues will be cleared before the new fill.",
+      )
+    ) {
+      return;
+    }
+
+    const next = grid.map((row) =>
+      row.map((cell) => ({ ...cell, letter: "", locked: false })),
+    );
+    for (const { entry, answer } of themeDrafts) {
+      const normalized = normalizeThemeAnswer(answer);
+      entry.cells.forEach(([row, col], index) => {
+        next[row][col] = {
+          ...next[row][col],
+          letter: normalized[index],
+          locked: true,
+        };
+      });
+    }
+
+    commitGrid(next);
+    setClues({});
+    setSelected(themeDrafts[0]?.entry.cells[0] ?? [0, 0]);
+    setDirection("A");
+    setThemeWizardOpen(false);
+    void fillGrid(next);
+  };
 
   const generateBlockLayout = async () => {
     if (engine !== "ready" || busy || layoutBusy) return;
@@ -712,12 +904,21 @@ export default function Home() {
           <button
             className={`fill-button header-fill-button ${busy ? "is-stopping" : ""}`}
             type="button"
-            onClick={busy ? stopFill : fillGrid}
+            onClick={busy ? stopFill : () => void fillGrid()}
             disabled={engine !== "ready" || (!busy && layoutBusy)}
             aria-busy={busy}
           >
             <span aria-hidden="true">{busy ? "■" : "✦"}</span>
             {busy ? "Stop fill" : "Fill grid"}
+          </button>
+          <button
+            className="quiet-button theme-wizard-button"
+            type="button"
+            onClick={openThemeWizard}
+            disabled={busy || layoutBusy}
+            aria-haspopup="dialog"
+          >
+            Theme wizard
           </button>
           <button className="quiet-button" type="button" onClick={resetToBlank}>New grid</button>
           <button className="quiet-button" type="button" onClick={() => fileInputRef.current?.click()}>Import</button>
@@ -1013,6 +1214,210 @@ export default function Home() {
           </section>
         </aside>
       </div>
+
+      {themeWizardOpen ? (
+        <div
+          className="theme-wizard-backdrop"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target && !busy) setThemeWizardOpen(false);
+          }}
+        >
+          <section
+            className="theme-wizard"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="theme-wizard-title"
+          >
+            <header className="theme-wizard-header">
+              <div>
+                <p className="eyebrow">Themed puzzle</p>
+                <h2 id="theme-wizard-title">Build around your best answers</h2>
+              </div>
+              <button
+                className="theme-close-button"
+                type="button"
+                onClick={() => setThemeWizardOpen(false)}
+                aria-label="Close theme wizard"
+                disabled={busy}
+              >
+                ×
+              </button>
+            </header>
+
+            <ol className="theme-steps" aria-label="Theme wizard progress">
+              {(["Slots", "Answers", "Fill"] as const).map((label, index) => {
+                const step = (index + 1) as 1 | 2 | 3;
+                return (
+                  <li
+                    className={step === themeStep ? "active" : step < themeStep ? "complete" : ""}
+                    key={label}
+                    aria-current={step === themeStep ? "step" : undefined}
+                  >
+                    <span>{step}</span>{label}
+                  </li>
+                );
+              })}
+            </ol>
+
+            <div className="theme-wizard-body">
+              {themeStep === 1 ? (
+                <div className="theme-step-content">
+                  <div className="theme-step-heading">
+                    <h3>How many theme answers?</h3>
+                    <p>
+                      We’ll use long Across slots and favor rotationally symmetric pairs in this layout.
+                    </p>
+                  </div>
+                  <div className="theme-count-options" aria-label="Number of theme answers">
+                    {([4, 5, 6] as ThemeCount[]).map((count) => (
+                      <button
+                        className={themeCount === count ? "active" : ""}
+                        type="button"
+                        key={count}
+                        onClick={() => changeThemeCount(count)}
+                        aria-pressed={themeCount === count}
+                      >
+                        <strong>{count}</strong>
+                        <span>answers</span>
+                      </button>
+                    ))}
+                  </div>
+                  <section className="theme-slot-preview" aria-labelledby="suggested-slots-heading">
+                    <div>
+                      <p className="eyebrow">Suggested for this layout</p>
+                      <h3 id="suggested-slots-heading">
+                        {themeDrafts.map(({ entry }) => entry.length).join(" · ") || "No slots available"}
+                      </h3>
+                    </div>
+                    <div className="theme-slot-map">
+                      {themeDrafts.map(({ entry }) => (
+                        <span key={entry.id}>
+                          <b>{entry.number}A</b>
+                          {entry.length} letters · row {entry.row + 1}
+                        </span>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+
+              {themeStep === 2 ? (
+                <div className="theme-step-content">
+                  <div className="theme-step-heading">
+                    <h3>Enter your theme answers</h3>
+                    <p>Spaces and punctuation are removed automatically. Every answer must fit exactly.</p>
+                  </div>
+                  <div className="theme-answer-list">
+                    {themeDrafts.map(({ entry, answer }, index) => {
+                      const normalized = normalizeThemeAnswer(answer);
+                      const complete = normalized.length === entry.length;
+                      return (
+                        <label className={complete ? "complete" : ""} key={entry.id}>
+                          <span className="theme-answer-slot">
+                            <strong>{entry.number} Across</strong>
+                            <small>{entry.length} letters · row {entry.row + 1}</small>
+                          </span>
+                          <input
+                            value={normalized}
+                            maxLength={entry.length}
+                            placeholder={`${entry.length}-letter answer`}
+                            autoComplete="off"
+                            spellCheck={false}
+                            onChange={(event) => {
+                              const nextAnswer = normalizeThemeAnswer(event.target.value);
+                              setThemeDrafts((current) =>
+                                current.map((draft, draftIndex) =>
+                                  draftIndex === index
+                                    ? { ...draft, answer: nextAnswer }
+                                    : draft,
+                                ),
+                              );
+                              setThemeError("");
+                            }}
+                            aria-label={`Theme answer for ${entry.number} Across, ${entry.length} letters`}
+                          />
+                          <span className="theme-answer-count">
+                            {normalized.length}/{entry.length}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {themeStep === 3 ? (
+                <div className="theme-step-content">
+                  <div className="theme-step-heading">
+                    <h3>Ready to construct</h3>
+                    <p>
+                      These answers will be placed as locked entries. The CSP filler will build the rest of the puzzle around them.
+                    </p>
+                  </div>
+                  <div className="theme-review-list">
+                    {themeDrafts.map(({ entry, answer }) => (
+                      <div key={entry.id}>
+                        <span><b>{entry.number}A</b>{entry.length}</span>
+                        <strong>{normalizeThemeAnswer(answer)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="theme-fill-note">
+                    <span aria-hidden="true">✓</span>
+                    Theme letters stay locked even if no complete fill is found, so you can revise and try again.
+                  </div>
+                </div>
+              ) : null}
+
+              {themeError ? <p className="theme-error" role="alert">{themeError}</p> : null}
+              {themeStep === 3 && engine !== "ready" ? (
+                <p className="theme-error" role="alert">Start the local fill engine before constructing.</p>
+              ) : null}
+            </div>
+
+            <footer className="theme-wizard-footer">
+              <button
+                className="quiet-button"
+                type="button"
+                onClick={() => {
+                  if (themeStep === 1) setThemeWizardOpen(false);
+                  else {
+                    setThemeStep((themeStep - 1) as 1 | 2);
+                    setThemeError("");
+                  }
+                }}
+              >
+                {themeStep === 1 ? "Cancel" : "Back"}
+              </button>
+              {themeStep === 1 ? (
+                <button
+                  className="theme-primary-button"
+                  type="button"
+                  onClick={() => setThemeStep(2)}
+                  disabled={themeDrafts.length !== themeCount}
+                >
+                  Enter answers
+                </button>
+              ) : null}
+              {themeStep === 2 ? (
+                <button className="theme-primary-button" type="button" onClick={reviewThemeAnswers}>
+                  Review themes
+                </button>
+              ) : null}
+              {themeStep === 3 ? (
+                <button
+                  className="theme-primary-button"
+                  type="button"
+                  onClick={placeThemesAndFill}
+                  disabled={engine !== "ready" || busy}
+                >
+                  Place themes &amp; fill
+                </button>
+              ) : null}
+            </footer>
+          </section>
+        </div>
+      ) : null}
 
     </main>
   );

@@ -59,7 +59,10 @@ solver chooses a different answer. Non-placeholder clue text is preserved.
 The browser-based constructor provides an editable and numbered crossword grid,
 180-degree block symmetry, seed-entry locks, undo/redo, live dictionary
 candidates, CSP fill controls, clue editing, ASCII import/export, and `.puz`
-export. Its block-layout generator offers airy, classic, and dense presets while
+export. The Theme wizard suggests four to six long, symmetric Across slots for
+the current layout, validates exact-length theme answers, locks them in place,
+and fills the remaining grid around them. Its block-layout generator offers
+airy, classic, and dense presets while
 enforcing rotational symmetry, connected white cells, minimum three-letter
 entries, and no solid 2x2 block areas.
 
