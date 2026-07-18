@@ -9,6 +9,7 @@ from web_server import (
     layout_response,
     puzzle_from_payload,
     serialize_puzzle,
+    theme_layouts_response,
 )
 
 
@@ -100,3 +101,35 @@ class WebServerPayloadTest(TestCase):
         self.assertEqual(33, response["layout"]["blockCount"])
         self.assertTrue(all(not cell["letter"] for row in response["cells"] for cell in row))
         self.assertEqual([], response["warnings"])
+
+    def test_finds_preflighted_layouts_for_theme_answers(self):
+        self.payload.update(
+            {
+                "answers": [
+                    "CLOUDFORMATION",
+                    "HEARTSANDMINDS",
+                    "TOTHELETTER",
+                    "PAREXEMPLE",
+                ],
+                "profile": "classic",
+                "seed": 12,
+                "searchAttempts": 30,
+            }
+        )
+
+        response = theme_layouts_response(self.payload)
+
+        self.assertEqual(3, len(response["candidates"]))
+        self.assertTrue(
+            any(candidate["analysis"]["viable"] for candidate in response["candidates"])
+        )
+        self.assertTrue(
+            any(candidate["layout"]["currentLayout"] for candidate in response["candidates"])
+        )
+        self.assertEqual(
+            set(self.payload["answers"]),
+            {
+                placement["answer"]
+                for placement in response["candidates"][0]["placements"]
+            },
+        )

@@ -50,6 +50,7 @@ type PuzzlePayload = {
     targetBlockCount: number;
     density: number;
     seed: number;
+    currentLayout?: boolean;
   };
 };
 
@@ -87,8 +88,42 @@ type CandidateResponse = {
 };
 
 type ThemeAnswerDraft = {
-  entry: Entry;
   answer: string;
+};
+
+type ThemePlacement = {
+  answerIndex: number;
+  answer: string;
+  entryId: string;
+  row: number;
+  col: number;
+  length: number;
+  label: "Flexible" | "Constrained" | "Tight" | "Blocked";
+  minimumCrossingDomain: number;
+  crossingCount: number;
+};
+
+type ThemeLayoutCandidate = PuzzlePayload & {
+  id: string;
+  layout: NonNullable<PuzzlePayload["layout"]>;
+  placements: ThemePlacement[];
+  analysis: {
+    verification: "verified" | "promising" | "preflight" | "blocked";
+    rating: string;
+    viable: boolean;
+    score: number;
+    minimumDomain: number;
+    averageDomain: number;
+    message: string;
+    tightEntries: Array<{ id: string; pattern: string; candidates: number }>;
+  };
+};
+
+type ThemeLayoutsResponse = {
+  answers: string[];
+  candidates: ThemeLayoutCandidate[];
+  message: string;
+  error?: string;
 };
 
 const API_BASE =
@@ -167,81 +202,6 @@ function makeEntry(
   };
 }
 
-const entryCellsKey = (cells: Array<[number, number]>): string =>
-  cells
-    .map(([row, col]) => `${row}:${col}`)
-    .sort()
-    .join("|");
-
-function suggestThemeEntries(
-  entries: Entry[],
-  rows: number,
-  cols: number,
-  requested: ThemeCount,
-): Entry[] {
-  const allAcross = entries.filter((entry) => entry.direction === "A");
-  const longAcross = allAcross.filter((entry) => entry.length >= 5);
-  const pool = longAcross.length >= requested ? longAcross : allAcross;
-  const entriesByCells = new Map(
-    pool.map((entry) => [entryCellsKey(entry.cells), entry]),
-  );
-  const pairs: Array<[Entry, Entry]> = [];
-  const centralEntries: Entry[] = [];
-  const paired = new Set<string>();
-
-  for (const entry of pool) {
-    const mirroredKey = entryCellsKey(
-      entry.cells.map(([row, col]) => [rows - 1 - row, cols - 1 - col]),
-    );
-    const counterpart = entriesByCells.get(mirroredKey);
-    if (!counterpart || counterpart.length !== entry.length) continue;
-    if (counterpart.id === entry.id) {
-      centralEntries.push(entry);
-      continue;
-    }
-    if (paired.has(entry.id) || paired.has(counterpart.id)) continue;
-    pairs.push([entry, counterpart]);
-    paired.add(entry.id);
-    paired.add(counterpart.id);
-  }
-
-  pairs.sort(
-    (left, right) =>
-      right[0].length - left[0].length ||
-      Math.min(left[0].row, left[1].row) - Math.min(right[0].row, right[1].row),
-  );
-  centralEntries.sort(
-    (left, right) => right.length - left.length || left.row - right.row,
-  );
-
-  const selected: Entry[] = [];
-  const selectedIds = new Set<string>();
-  const add = (entry: Entry | undefined) => {
-    if (!entry || selectedIds.has(entry.id) || selected.length >= requested) return;
-    selected.push(entry);
-    selectedIds.add(entry.id);
-  };
-
-  for (const pair of pairs.slice(0, Math.floor(requested / 2))) {
-    add(pair[0]);
-    add(pair[1]);
-  }
-  if (requested % 2 === 1) add(centralEntries[0]);
-
-  const centerRow = (rows - 1) / 2;
-  const fallbacks = [...pool].sort(
-    (left, right) =>
-      right.length - left.length ||
-      Math.abs(left.row - centerRow) - Math.abs(right.row - centerRow) ||
-      left.row - right.row,
-  );
-  for (const entry of fallbacks) add(entry);
-
-  return selected
-    .slice(0, requested)
-    .sort((left, right) => left.row - right.row || left.col - right.col);
-}
-
 const normalizeThemeAnswer = (value: string): string =>
   value.toUpperCase().replace(/[^A-Z]/g, "");
 
@@ -316,10 +276,14 @@ export default function Home() {
   const [themeCount, setThemeCount] = useState<ThemeCount>(4);
   const [themeName, setThemeName] = useState("");
   const [themeDrafts, setThemeDrafts] = useState<ThemeAnswerDraft[]>([]);
+  const [themeLayouts, setThemeLayouts] = useState<ThemeLayoutCandidate[]>([]);
+  const [selectedThemeLayoutId, setSelectedThemeLayoutId] = useState("");
+  const [themeSearching, setThemeSearching] = useState(false);
   const [themeError, setThemeError] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const layoutSeedRef = useRef(0);
+  const themeSeedRef = useRef(0);
 
   const derived = useMemo(() => deriveEntries(grid), [grid]);
   const numberedGrid = derived.cells;
@@ -346,6 +310,8 @@ export default function Home() {
   const missingClueCount = entries.filter((entry) => !clues[entry.id]?.trim()).length;
   const activeCandidateData =
     candidateData?.entryId === activeEntry?.id ? candidateData : null;
+  const selectedThemeLayout =
+    themeLayouts.find((candidate) => candidate.id === selectedThemeLayoutId) ?? null;
 
   const buildPayload = useCallback(
     () => ({
@@ -643,46 +609,44 @@ export default function Home() {
   const stopFill = () => abortRef.current?.abort();
 
   const createThemeDrafts = (count: ThemeCount): ThemeAnswerDraft[] =>
-    suggestThemeEntries(entries, grid.length, grid[0]?.length ?? 0, count).map(
-      (entry) => ({ entry, answer: "" }),
-    );
+    Array.from({ length: count }, () => ({ answer: "" }));
 
   const openThemeWizard = () => {
-    const drafts = createThemeDrafts(themeCount);
     const currentTitle = metadata.title.trim();
     setThemeName(currentTitle === "Untitled crossword" ? "" : currentTitle);
-    setThemeDrafts(drafts);
+    setThemeDrafts(createThemeDrafts(themeCount));
+    setThemeLayouts([]);
+    setSelectedThemeLayoutId("");
     setThemeStep(1);
-    setThemeError(
-      drafts.length === themeCount
-        ? ""
-        : "This layout does not have enough Across entries for that many theme answers.",
-    );
+    setThemeError("");
     setThemeWizardOpen(true);
   };
 
   const changeThemeCount = (count: ThemeCount) => {
-    const drafts = createThemeDrafts(count);
     setThemeCount(count);
-    setThemeDrafts(drafts);
-    setThemeError(
-      drafts.length === count
-        ? ""
-        : "This layout does not have enough Across entries for that many theme answers.",
+    setThemeDrafts((current) =>
+      Array.from({ length: count }, (_, index) => current[index] ?? { answer: "" }),
     );
+    setThemeLayouts([]);
+    setSelectedThemeLayoutId("");
+    setThemeError("");
   };
 
   const validateThemeAnswers = (): boolean => {
     if (themeDrafts.length !== themeCount) {
-      setThemeError("Choose a layout with enough Across entries for your themes.");
+      setThemeError("Add one answer for every theme slot.");
       return false;
     }
+    const maximumLength = grid[0]?.length ?? 15;
     const incomplete = themeDrafts.find(
-      ({ entry, answer }) => normalizeThemeAnswer(answer).length !== entry.length,
+      ({ answer }) => {
+        const length = normalizeThemeAnswer(answer).length;
+        return length < 3 || length > maximumLength;
+      },
     );
     if (incomplete) {
       setThemeError(
-        `${incomplete.entry.number} Across needs exactly ${incomplete.entry.length} letters.`,
+        `Each theme answer needs between 3 and ${maximumLength} letters.`,
       );
       return false;
     }
@@ -695,12 +659,56 @@ export default function Home() {
     return true;
   };
 
-  const reviewThemeAnswers = () => {
-    if (validateThemeAnswers()) setThemeStep(3);
+  const findThemeLayouts = async () => {
+    if (!validateThemeAnswers() || themeSearching || engine !== "ready") return;
+    setThemeStep(2);
+    setThemeSearching(true);
+    setThemeError("");
+    setThemeLayouts([]);
+    setSelectedThemeLayoutId("");
+    const searchSeed = themeSeedRef.current || Date.now();
+    themeSeedRef.current = searchSeed + 1;
+    try {
+      const response = await fetch(`${API_BASE}/theme-layouts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rows: grid.length,
+          cols: grid[0]?.length ?? 0,
+          cells: grid,
+          title: themeName.trim() || "Untitled crossword",
+          author: metadata.author,
+          profile: layoutProfile,
+          seed: searchSeed,
+          searchAttempts: 150,
+          answers: themeDrafts.map(({ answer }) => normalizeThemeAnswer(answer)),
+        }),
+      });
+      const data = (await response.json()) as ThemeLayoutsResponse;
+      if (!response.ok) throw new Error(data.error || "Theme layout search failed");
+      setThemeLayouts(data.candidates);
+      const firstViable = data.candidates.find((candidate) => candidate.analysis.viable);
+      setSelectedThemeLayoutId(firstViable?.id ?? "");
+      if (!firstViable) setThemeError(data.message);
+    } catch (error) {
+      setThemeError((error as Error).message);
+    } finally {
+      setThemeSearching(false);
+    }
+  };
+
+  const reviewThemeLayout = () => {
+    if (!selectedThemeLayout?.analysis.viable) {
+      setThemeError("Choose a viable layout before continuing.");
+      return;
+    }
+    setThemeError("");
+    setThemeStep(3);
   };
 
   const placeThemesAndFill = () => {
-    if (!validateThemeAnswers()) {
+    if (!selectedThemeLayout?.analysis.viable) {
+      setThemeError("Choose a viable layout before constructing.");
       setThemeStep(2);
       return;
     }
@@ -708,25 +716,13 @@ export default function Home() {
     if (
       hasLetters &&
       !window.confirm(
-        "Place these theme answers? Existing letters and clues will be cleared before the new fill.",
+        "Use this theme layout? Existing blocks, letters, and clues will be replaced.",
       )
     ) {
       return;
     }
 
-    const next = grid.map((row) =>
-      row.map((cell) => ({ ...cell, letter: "", locked: false })),
-    );
-    for (const { entry, answer } of themeDrafts) {
-      const normalized = normalizeThemeAnswer(answer);
-      entry.cells.forEach(([row, col], index) => {
-        next[row][col] = {
-          ...next[row][col],
-          letter: normalized[index],
-          locked: true,
-        };
-      });
-    }
+    const next = cloneGrid(selectedThemeLayout.cells);
 
     commitGrid(next);
     setClues({});
@@ -734,7 +730,10 @@ export default function Home() {
       ...current,
       title: themeName.trim() || "Untitled crossword",
     }));
-    setSelected(themeDrafts[0]?.entry.cells[0] ?? [0, 0]);
+    const firstPlacement = selectedThemeLayout.placements[0];
+    setSelected(
+      firstPlacement ? [firstPlacement.row, firstPlacement.col] : [0, 0],
+    );
     setDirection("A");
     setThemeWizardOpen(false);
     void fillGrid(next);
@@ -1226,7 +1225,9 @@ export default function Home() {
         <div
           className="theme-wizard-backdrop"
           onMouseDown={(event) => {
-            if (event.currentTarget === event.target && !busy) setThemeWizardOpen(false);
+            if (event.currentTarget === event.target && !busy && !themeSearching) {
+              setThemeWizardOpen(false);
+            }
           }}
         >
           <section
@@ -1245,14 +1246,14 @@ export default function Home() {
                 type="button"
                 onClick={() => setThemeWizardOpen(false)}
                 aria-label="Close theme wizard"
-                disabled={busy}
+                disabled={busy || themeSearching}
               >
                 ×
               </button>
             </header>
 
             <ol className="theme-steps" aria-label="Theme wizard progress">
-              {(["Slots", "Answers", "Fill"] as const).map((label, index) => {
+              {(["Themes", "Layouts", "Fill"] as const).map((label, index) => {
                 const step = (index + 1) as 1 | 2 | 3;
                 return (
                   <li
@@ -1270,9 +1271,9 @@ export default function Home() {
               {themeStep === 1 ? (
                 <div className="theme-step-content">
                   <div className="theme-step-heading">
-                    <h3>How many theme answers?</h3>
+                    <h3>Start with the theme answers</h3>
                     <p>
-                      We’ll use long Across slots and favor rotationally symmetric pairs in this layout.
+                      Enter the phrases you want to keep. We’ll search the current grid and new standard layouts for supportive crossings.
                     </p>
                   </div>
                   <label className="theme-name-field">
@@ -1301,49 +1302,20 @@ export default function Home() {
                       </button>
                     ))}
                   </div>
-                  <section className="theme-slot-preview" aria-labelledby="suggested-slots-heading">
-                    <div>
-                      <p className="eyebrow">Suggested for this layout</p>
-                      <h3 id="suggested-slots-heading">
-                        {themeDrafts.map(({ entry }) => entry.length).join(" · ") || "No slots available"}
-                      </h3>
-                    </div>
-                    <div className="theme-slot-map">
-                      {themeDrafts.map(({ entry }) => (
-                        <span key={entry.id}>
-                          <b>{entry.number}A</b>
-                          {entry.length} letters · row {entry.row + 1}
-                        </span>
-                      ))}
-                    </div>
-                  </section>
-                </div>
-              ) : null}
-
-              {themeStep === 2 ? (
-                <div className="theme-step-content">
-                  <div className="theme-step-heading">
-                    <h3>Enter your theme answers</h3>
-                    <p>Spaces and punctuation are removed automatically. Every answer must fit exactly.</p>
-                  </div>
-                  <div className="theme-name-banner">
-                    <span>Theme</span>
-                    <strong>{themeName.trim() || "Untitled theme"}</strong>
-                  </div>
-                  <div className="theme-answer-list">
-                    {themeDrafts.map(({ entry, answer }, index) => {
+                  <div className="theme-answer-list theme-answer-entry-list">
+                    {themeDrafts.map(({ answer }, index) => {
                       const normalized = normalizeThemeAnswer(answer);
-                      const complete = normalized.length === entry.length;
+                      const complete = normalized.length >= 3;
                       return (
-                        <label className={complete ? "complete" : ""} key={entry.id}>
+                        <label className={complete ? "complete" : ""} key={index}>
                           <span className="theme-answer-slot">
-                            <strong>{entry.number} Across</strong>
-                            <small>{entry.length} letters · row {entry.row + 1}</small>
+                            <strong>Theme {index + 1}</strong>
+                            <small>3–{grid[0]?.length ?? 15} letters</small>
                           </span>
                           <input
                             value={normalized}
-                            maxLength={entry.length}
-                            placeholder={`${entry.length}-letter answer`}
+                            maxLength={grid[0]?.length ?? 15}
+                            placeholder="Enter answer"
                             autoComplete="off"
                             spellCheck={false}
                             onChange={(event) => {
@@ -1355,39 +1327,162 @@ export default function Home() {
                                     : draft,
                                 ),
                               );
+                              setThemeLayouts([]);
+                              setSelectedThemeLayoutId("");
                               setThemeError("");
                             }}
-                            aria-label={`Theme answer for ${entry.number} Across, ${entry.length} letters`}
+                            aria-label={`Theme answer ${index + 1}`}
                           />
                           <span className="theme-answer-count">
-                            {normalized.length}/{entry.length}
+                            {normalized.length || "—"}
                           </span>
                         </label>
                       );
                     })}
                   </div>
+                  <p className="theme-entry-note">
+                    Theme answers can be custom phrases or proper names; they do not need to appear in the fill dictionary.
+                  </p>
                 </div>
               ) : null}
 
-              {themeStep === 3 ? (
+              {themeStep === 2 ? (
+                <div className="theme-step-content">
+                  <div className="theme-step-heading theme-layout-heading">
+                    <div>
+                      <h3>Choose a fillable layout</h3>
+                      <p>Each option has already passed dictionary propagation; verified choices also completed a short test fill.</p>
+                    </div>
+                    {!themeSearching && themeLayouts.length ? (
+                      <button className="quiet-button" type="button" onClick={() => void findThemeLayouts()}>
+                        Try other layouts
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="theme-name-banner">
+                    <span>Theme</span>
+                    <strong>{themeName.trim() || "Untitled theme"}</strong>
+                  </div>
+                  <div className="theme-answer-summary">
+                    {themeDrafts.map(({ answer }, index) => (
+                      <span key={index}><b>{normalizeThemeAnswer(answer)}</b>{normalizeThemeAnswer(answer).length}</span>
+                    ))}
+                  </div>
+
+                  {themeSearching ? (
+                    <div className="theme-searching" aria-live="polite">
+                      <span className="theme-search-spinner" aria-hidden="true" />
+                      <div>
+                        <h3>Building around your themes…</h3>
+                        <p>Trying placements, standard block patterns, arc consistency, and short test fills.</p>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {!themeSearching && themeLayouts.length ? (
+                    <div className="theme-layout-options" role="radiogroup" aria-label="Theme layout choices">
+                      {themeLayouts.map((candidate, index) => {
+                        const selectedLayout = candidate.id === selectedThemeLayoutId;
+                        const blocked = !candidate.analysis.viable;
+                        return (
+                          <button
+                            className={`theme-layout-card ${selectedLayout ? "selected" : ""} ${blocked ? "blocked" : ""}`}
+                            type="button"
+                            role="radio"
+                            aria-checked={selectedLayout}
+                            key={candidate.id}
+                            onClick={() => {
+                              setSelectedThemeLayoutId(candidate.id);
+                              setThemeError("");
+                            }}
+                            disabled={blocked}
+                          >
+                            <div
+                              className="theme-mini-grid"
+                              style={{ "--preview-cols": candidate.cols } as React.CSSProperties}
+                              aria-hidden="true"
+                            >
+                              {candidate.cells.flatMap((row, rowIndex) =>
+                                row.map((cell, colIndex) => (
+                                  <span
+                                    className={`${cell.black ? "black" : ""} ${cell.locked ? "theme" : ""}`}
+                                    key={`${rowIndex}:${colIndex}`}
+                                  />
+                                )),
+                              )}
+                            </div>
+                            <span className="theme-layout-card-copy">
+                              <span className="theme-layout-card-title">
+                                <strong>{candidate.layout.currentLayout ? "Current grid" : `Option ${index + 1}`}</strong>
+                                <b className={candidate.analysis.verification}>{candidate.analysis.rating}</b>
+                              </span>
+                              <span className="theme-layout-metrics">
+                                <small>{candidate.layout.blockCount} blocks</small>
+                                <small>Fit score {Math.round(candidate.analysis.score)}</small>
+                                <small>Min support {candidate.analysis.minimumDomain}</small>
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
+                  {!themeSearching && selectedThemeLayout ? (
+                    <div className="theme-placement-preview">
+                      {selectedThemeLayout.placements.map((placement) => (
+                        <span key={placement.answerIndex}>
+                          <b>{placement.answer}</b>
+                          <small>{placement.entryId} · {placement.length} letters</small>
+                          <em className={placement.label.toLowerCase()}>{placement.label}</em>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {themeStep === 3 && selectedThemeLayout ? (
                 <div className="theme-step-content">
                   <div className="theme-step-heading">
                     <h3>Ready to construct</h3>
                     <p>
-                      These answers will be placed as locked entries. The CSP filler will build the rest of the puzzle around them.
+                      The selected pattern supports every theme crossing. Theme answers will stay locked while the quality-aware CSP filler completes the grid.
                     </p>
                   </div>
+                  <div className="theme-final-layout-summary">
+                    <div
+                      className="theme-mini-grid large"
+                      style={{ "--preview-cols": selectedThemeLayout.cols } as React.CSSProperties}
+                      aria-label="Selected theme layout preview"
+                    >
+                      {selectedThemeLayout.cells.flatMap((row, rowIndex) =>
+                        row.map((cell, colIndex) => (
+                          <span
+                            className={`${cell.black ? "black" : ""} ${cell.locked ? "theme" : ""}`}
+                            key={`${rowIndex}:${colIndex}`}
+                          />
+                        )),
+                      )}
+                    </div>
+                    <div>
+                      <p className="eyebrow">Preflight result</p>
+                      <h3>{selectedThemeLayout.analysis.rating}</h3>
+                      <p>{selectedThemeLayout.analysis.message}</p>
+                    </div>
+                  </div>
                   <div className="theme-review-list">
-                    {themeDrafts.map(({ entry, answer }) => (
-                      <div key={entry.id}>
-                        <span><b>{entry.number}A</b>{entry.length}</span>
-                        <strong>{normalizeThemeAnswer(answer)}</strong>
+                    {selectedThemeLayout.placements.map((placement) => (
+                      <div key={placement.answerIndex}>
+                        <span><b>{placement.entryId}</b>{placement.length}</span>
+                        <strong>{placement.answer}</strong>
+                        <em className={placement.label.toLowerCase()}>{placement.label}</em>
                       </div>
                     ))}
                   </div>
                   <div className="theme-fill-note">
                     <span aria-hidden="true">✓</span>
-                    Theme letters stay locked even if no complete fill is found, so you can revise and try again.
+                    If the quality-first search still times out, the theme grid remains in the editor so you can retry with a wider dictionary or another layout.
                   </div>
                 </div>
               ) : null}
@@ -1402,6 +1497,7 @@ export default function Home() {
               <button
                 className="quiet-button"
                 type="button"
+                disabled={themeSearching}
                 onClick={() => {
                   if (themeStep === 1) setThemeWizardOpen(false);
                   else {
@@ -1416,15 +1512,20 @@ export default function Home() {
                 <button
                   className="theme-primary-button"
                   type="button"
-                  onClick={() => setThemeStep(2)}
-                  disabled={themeDrafts.length !== themeCount}
+                  onClick={() => void findThemeLayouts()}
+                  disabled={engine !== "ready" || themeSearching}
                 >
-                  Enter answers
+                  Find layouts
                 </button>
               ) : null}
               {themeStep === 2 ? (
-                <button className="theme-primary-button" type="button" onClick={reviewThemeAnswers}>
-                  Review themes
+                <button
+                  className="theme-primary-button"
+                  type="button"
+                  onClick={reviewThemeLayout}
+                  disabled={themeSearching || !selectedThemeLayout?.analysis.viable}
+                >
+                  Review layout
                 </button>
               ) : null}
               {themeStep === 3 ? (
@@ -1432,9 +1533,9 @@ export default function Home() {
                   className="theme-primary-button"
                   type="button"
                   onClick={placeThemesAndFill}
-                  disabled={engine !== "ready" || busy}
+                  disabled={engine !== "ready" || busy || !selectedThemeLayout?.analysis.viable}
                 >
-                  Place themes &amp; fill
+                  Use layout &amp; fill
                 </button>
               ) : null}
             </footer>

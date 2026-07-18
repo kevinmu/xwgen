@@ -81,6 +81,17 @@ class FillResult:
 
 
 @dataclass(frozen=True)
+class FillAnalysis:
+    viable: bool
+    score: float
+    minimum_domain: int
+    average_domain: float
+    domain_counts: Mapping[str, int]
+    tight_entries: Tuple[Tuple[str, str, int], ...]
+    message: str = ""
+
+
+@dataclass(frozen=True)
 class Crossing:
     other_slot: str
     position: int
@@ -138,8 +149,11 @@ class PuzzleFiller:
         self.config = config or SolverConfig()
 
         self._entries: Dict[str, Entry] = {}
+        self._all_entries: Dict[str, Entry] = {}
+        self._fixed_answers: Dict[str, str] = {}
         self._lengths: Dict[str, int] = {}
         self._crossings: Dict[str, Tuple[Crossing, ...]] = {}
+        self._all_crossings: Dict[str, Tuple[Crossing, ...]] = {}
         self._slots_by_length: Dict[int, Tuple[str, ...]] = {}
         self._all_arcs: Tuple[Tuple[str, Crossing], ...] = ()
         self._deadline = 0.0
@@ -180,7 +194,10 @@ class PuzzleFiller:
             last_outcome = tier_outcome
 
             if tier_outcome.solution is not None:
-                assignments = self._decode_solution(tier_outcome.solution)
+                assignments = {
+                    **self._fixed_answers,
+                    **self._decode_solution(tier_outcome.solution),
+                }
                 self._validate_solution(assignments)
                 self._apply_solution(assignments)
                 return self._result(
@@ -216,6 +233,104 @@ class PuzzleFiller:
             message,
         )
 
+    def analyze_puzzle(
+        self,
+        puzzle: Puzzle,
+        *,
+        minimum_score: Optional[float] = None,
+    ) -> FillAnalysis:
+        """Run domain construction and arc consistency without search."""
+        self._stats = _SearchStats()
+        self._prepare_structure(puzzle)
+        duplicate_fixed = len(set(self._fixed_answers.values())) != len(
+            self._fixed_answers
+        )
+        if duplicate_fixed:
+            return FillAnalysis(
+                viable=False,
+                score=0.0,
+                minimum_domain=0,
+                average_domain=0.0,
+                domain_counts={},
+                tight_entries=(),
+                message="Required answers contain a duplicate",
+            )
+
+        domains = {
+            slot: self.word_filler.domain_for_pattern(
+                entry.get_current_hint(), minimum_score=minimum_score
+            )
+            for slot, entry in self._entries.items()
+        }
+        self._remove_fixed_answers(domains)
+        empty_slots = [slot for slot, domain in domains.items() if domain == 0]
+        if empty_slots:
+            counts = {slot: domain.bit_count() for slot, domain in domains.items()}
+            tight = self._tight_entry_summary(counts)
+            return FillAnalysis(
+                viable=False,
+                score=0.0,
+                minimum_domain=0,
+                average_domain=0.0,
+                domain_counts=counts,
+                tight_entries=tight,
+                message=f"No dictionary candidates for: {', '.join(sorted(empty_slots))}",
+            )
+
+        reasons = {slot: {slot} for slot in domains}
+        conflict = self._propagate(domains, reasons)
+        counts = {slot: domain.bit_count() for slot, domain in domains.items()}
+        tight = self._tight_entry_summary(counts)
+        if conflict is not None:
+            involved = ", ".join(sorted(conflict))
+            return FillAnalysis(
+                viable=False,
+                score=0.0,
+                minimum_domain=min(counts.values(), default=0),
+                average_domain=0.0,
+                domain_counts=counts,
+                tight_entries=tight,
+                message=(
+                    f"Crossing constraints conflict near {involved}"
+                    if involved
+                    else "Crossing constraints are inconsistent"
+                ),
+            )
+
+        if not counts:
+            return FillAnalysis(
+                viable=True,
+                score=100.0,
+                minimum_domain=1,
+                average_domain=1.0,
+                domain_counts=counts,
+                tight_entries=tight,
+                message="All entries are already fixed",
+            )
+        log_counts = [math.log1p(count) for count in counts.values()]
+        average_domain = math.expm1(sum(log_counts) / len(log_counts))
+        minimum_domain = min(counts.values())
+        score = sum(log_counts) / len(log_counts) + 0.5 * math.log1p(minimum_domain)
+        return FillAnalysis(
+            viable=True,
+            score=score,
+            minimum_domain=minimum_domain,
+            average_domain=average_domain,
+            domain_counts=counts,
+            tight_entries=tight,
+            message="All entries retain dictionary support after propagation",
+        )
+
+    def _tight_entry_summary(
+        self,
+        counts: Mapping[str, int],
+    ) -> Tuple[Tuple[str, str, int], ...]:
+        ordered = sorted(counts, key=lambda slot: (counts[slot], slot))[:6]
+        return tuple(
+            (slot, self._entries[slot].get_current_hint(), counts[slot])
+            for slot in ordered
+        )
+
     def _fill_quality_tier(
         self,
         config: SolverConfig,
@@ -233,6 +348,7 @@ class PuzzleFiller:
                 pattern,
                 minimum_score=score_floor,
             )
+        self._remove_fixed_answers(domains)
 
         empty_slots = [slot for slot, domain in domains.items() if domain == 0]
         if empty_slots:
@@ -285,6 +401,15 @@ class PuzzleFiller:
             message="This quality tier exhausted its search budget",
         )
 
+    def _remove_fixed_answers(self, domains: Dict[str, int]) -> None:
+        for answer in set(self._fixed_answers.values()):
+            word_id = self.word_filler.word_id(answer)
+            if word_id is None:
+                continue
+            word_bit = 1 << word_id
+            for slot in self._slots_by_length.get(len(answer), ()):
+                domains[slot] &= ~word_bit
+
     @staticmethod
     def _quality_tier_message(
         minimum_score: Optional[float],
@@ -308,30 +433,51 @@ class PuzzleFiller:
         if not hasattr(puzzle, "entries"):
             raise ValueError("Puzzle.initialize() must be called before filling")
 
-        self._entries = dict(puzzle.entries)
+        self._all_entries = dict(puzzle.entries)
+        self._fixed_answers = {
+            slot: entry.get_current_hint()
+            for slot, entry in self._all_entries.items()
+            if "." not in entry.get_current_hint()
+        }
+        self._entries = {
+            slot: entry
+            for slot, entry in self._all_entries.items()
+            if slot not in self._fixed_answers
+        }
         self._lengths = {
             slot: entry.answer_length for slot, entry in self._entries.items()
         }
 
         square_locations: Dict[int, List[Tuple[str, int]]] = defaultdict(list)
-        for slot, entry in self._entries.items():
+        for slot, entry in self._all_entries.items():
             for position, square in enumerate(entry.squares):
                 square_locations[id(square)].append((slot, position))
 
-        crossings: Dict[str, List[Crossing]] = {slot: [] for slot in self._entries}
+        all_crossings: Dict[str, List[Crossing]] = {
+            slot: [] for slot in self._all_entries
+        }
         for locations in square_locations.values():
             if len(locations) != 2:
                 continue
             (first_slot, first_position), (second_slot, second_position) = locations
-            crossings[first_slot].append(
+            all_crossings[first_slot].append(
                 Crossing(second_slot, first_position, second_position)
             )
-            crossings[second_slot].append(
+            all_crossings[second_slot].append(
                 Crossing(first_slot, second_position, first_position)
             )
 
+        self._all_crossings = {
+            slot: tuple(slot_crossings)
+            for slot, slot_crossings in all_crossings.items()
+        }
         self._crossings = {
-            slot: tuple(slot_crossings) for slot, slot_crossings in crossings.items()
+            slot: tuple(
+                crossing
+                for crossing in all_crossings[slot]
+                if crossing.other_slot in self._entries
+            )
+            for slot in self._entries
         }
         slots_by_length: Dict[int, List[str]] = defaultdict(list)
         for slot, length in self._lengths.items():
@@ -558,13 +704,15 @@ class PuzzleFiller:
         return assignments
 
     def _validate_solution(self, assignments: Mapping[str, str]) -> None:
+        if set(assignments) != set(self._all_entries):
+            raise RuntimeError("Internal solver error: solution is missing entries")
         if len(set(assignments.values())) != len(assignments):
             raise RuntimeError(
                 "Internal solver error: solution contains duplicate answers"
             )
 
         for slot, word in assignments.items():
-            entry = self._entries[slot]
+            entry = self._all_entries[slot]
             pattern = entry.get_current_hint()
             if len(word) != len(pattern) or any(
                 expected != "." and expected != actual
@@ -573,7 +721,7 @@ class PuzzleFiller:
                 raise RuntimeError(
                     f"Internal solver error: {word} conflicts with {slot} ({pattern})"
                 )
-            for crossing in self._crossings[slot]:
+            for crossing in self._all_crossings[slot]:
                 if (
                     word[crossing.position]
                     != assignments[crossing.other_slot][crossing.other_position]
@@ -584,7 +732,7 @@ class PuzzleFiller:
 
     def _apply_solution(self, assignments: Mapping[str, str]) -> None:
         for slot, word in assignments.items():
-            entry = self._entries[slot]
+            entry = self._all_entries[slot]
             for square, letter in zip(entry.squares, word):
                 square.letter = letter
             if entry.clue is None or entry.clue.startswith("Clue for "):

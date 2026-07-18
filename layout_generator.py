@@ -36,6 +36,8 @@ def generate_layout(
     profile: str = "classic",
     seed: int = 0,
     attempts: int = 20,
+    required_white: Sequence[Coordinate] = (),
+    required_blocks: Sequence[Coordinate] = (),
 ) -> LayoutResult:
     """Return a standard-style block layout for a rectangular crossword.
 
@@ -53,17 +55,38 @@ def generate_layout(
     if attempts < 1:
         raise ValueError("attempts must be positive")
 
+    white_constraints = _symmetric_coordinates(rows, cols, required_white)
+    block_constraints = _symmetric_coordinates(rows, cols, required_blocks)
+    if white_constraints & block_constraints:
+        raise ValueError("Layout constraints require the same square to be white and black")
+
     target = round(rows * cols * PROFILE_DENSITIES[profile])
     # Even-sized grids cannot contain a self-symmetric center square, so their
     # block counts must be even under 180-degree symmetry.
     if rows * cols % 2 == 0 and target % 2:
         target += 1
+    center = (rows // 2, cols // 2) if rows % 2 and cols % 2 else None
+    if center in white_constraints and target % 2:
+        target += 1
+    elif center in block_constraints and target % 2 == 0:
+        target += 1
+    if len(block_constraints) > target:
+        target = len(block_constraints)
+        if center is not None and (center in block_constraints) != bool(target % 2):
+            target += 1
 
     best_grid = None
     best_score = float("-inf")
     rng = random.Random(seed)
     for _ in range(attempts):
-        candidate = _construct_candidate(rows, cols, target, rng)
+        candidate = _construct_candidate(
+            rows,
+            cols,
+            target,
+            rng,
+            required_white=white_constraints,
+            required_blocks=block_constraints,
+        )
         if candidate is None:
             continue
         score = _aesthetic_score(candidate) + rng.random() * 0.001
@@ -112,8 +135,19 @@ def _construct_candidate(
     cols: int,
     target: int,
     rng: random.Random,
+    *,
+    required_white: Sequence[Coordinate] = (),
+    required_blocks: Sequence[Coordinate] = (),
 ) -> BlockGrid | None:
     blocks = [[False for _ in range(cols)] for _ in range(rows)]
+    white_constraints = set(required_white)
+    block_constraints = set(required_blocks)
+    for row, col in block_constraints:
+        blocks[row][col] = True
+    if not _repair_short_slots(blocks, white_constraints):
+        return None
+    if not _is_valid_partial(blocks):
+        return None
     representatives: List[Tuple[Coordinate, ...]] = []
     center_pair: Tuple[Coordinate, ...] | None = None
 
@@ -126,19 +160,28 @@ def _construct_candidate(
             elif coordinate == opposite:
                 center_pair = (coordinate,)
 
-    block_count = 0
+    block_count = sum(sum(row) for row in blocks)
     if target % 2:
         if center_pair is None:
             return None
-        _set_pair(blocks, center_pair, True)
-        if not _is_valid_partial(blocks):
-            return None
-        block_count = 1
+        if not blocks[center_pair[0][0]][center_pair[0][1]]:
+            if center_pair[0] in white_constraints:
+                return None
+            _set_pair(blocks, center_pair, True)
+            if not _is_valid_partial(blocks):
+                return None
+            block_count += 1
 
     rng.shuffle(representatives)
     for pair in representatives:
         if block_count >= target:
             break
+        if any(coordinate in white_constraints for coordinate in pair):
+            continue
+        if all(blocks[row][col] for row, col in pair):
+            continue
+        if block_count + len(pair) > target:
+            continue
         _set_pair(blocks, pair, True)
         if _is_valid_partial(blocks):
             block_count += len(pair)
@@ -148,6 +191,66 @@ def _construct_candidate(
     if block_count != target or validate_layout(blocks):
         return None
     return blocks
+
+
+def _repair_short_slots(
+    blocks: BlockGrid,
+    required_white: set[Coordinate],
+) -> bool:
+    """Block forced one- and two-cell fragments created by constraints."""
+    rows = len(blocks)
+    cols = len(blocks[0])
+    while True:
+        forced: set[Coordinate] = set()
+        for row in range(rows):
+            start = 0
+            while start < cols:
+                while start < cols and blocks[row][start]:
+                    start += 1
+                end = start
+                while end < cols and not blocks[row][end]:
+                    end += 1
+                if 0 < end - start < 3:
+                    forced.update((row, col) for col in range(start, end))
+                start = end
+        for col in range(cols):
+            start = 0
+            while start < rows:
+                while start < rows and blocks[start][col]:
+                    start += 1
+                end = start
+                while end < rows and not blocks[end][col]:
+                    end += 1
+                if 0 < end - start < 3:
+                    forced.update((row, col) for row in range(start, end))
+                start = end
+        if not forced:
+            return True
+        expanded = set(forced)
+        expanded.update((rows - 1 - row, cols - 1 - col) for row, col in forced)
+        if expanded & required_white:
+            return False
+        changed = False
+        for row, col in expanded:
+            if not blocks[row][col]:
+                blocks[row][col] = True
+                changed = True
+        if not changed:
+            return False
+
+
+def _symmetric_coordinates(
+    rows: int,
+    cols: int,
+    coordinates: Sequence[Coordinate],
+) -> set[Coordinate]:
+    expanded: set[Coordinate] = set()
+    for row, col in coordinates:
+        if not (0 <= row < rows and 0 <= col < cols):
+            raise ValueError(f"Layout constraint ({row}, {col}) is outside the grid")
+        expanded.add((row, col))
+        expanded.add((rows - 1 - row, cols - 1 - col))
+    return expanded
 
 
 def _set_pair(blocks: BlockGrid, pair: Sequence[Coordinate], value: bool) -> None:

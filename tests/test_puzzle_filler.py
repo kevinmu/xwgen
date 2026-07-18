@@ -149,6 +149,19 @@ class PuzzleFillerTest(TestCase):
         self.assertEqual(50.0, result.minimum_score)
         self.assertEqual(words, set(result.assignments.values()))
 
+    def test_preserves_a_complete_theme_answer_outside_the_lexicon(self):
+        puzzle = Puzzle(3, 3)
+        for col, letter in enumerate("QZX"):
+            puzzle.grid[0][col].letter = letter
+        puzzle.initialize()
+        filler = self.make_filler(["DEF", "GHI", "QDG", "ZEH", "XFI"])
+
+        result = filler.fill_puzzle(puzzle)
+
+        self.assertEqual(FillStatus.SOLVED, result.status)
+        self.assertEqual("QZX", result.assignments["1A"])
+        self.assertEqual(6, len(result.assignments))
+
     def test_budget_cutoff_returns_timeout_and_leaves_the_grid_unchanged(self):
         puzzle = Puzzle(3, 3)
         puzzle.initialize()

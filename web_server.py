@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from layout_generator import generate_layout
 from puzzle import Puzzle
 from puzzle_filler import QUALITY_MODE_CUTOFFS, PuzzleFiller, SolverConfig
+from theme_layout import search_theme_layouts, theme_crossability
 from word_filler import WordFiller
 
 
@@ -308,6 +309,121 @@ def layout_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
     return response
 
 
+def theme_layouts_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    try:
+        rows = int(payload.get("rows", 15))
+        cols = int(payload.get("cols", 15))
+        seed = int(payload.get("seed", 0))
+    except (TypeError, ValueError) as exc:
+        raise PayloadError("Theme layout dimensions and seed must be integers") from exc
+    if not (7 <= rows <= MAX_GRID_SIZE and 7 <= cols <= MAX_GRID_SIZE):
+        raise PayloadError(f"Theme layouts require dimensions between 7 and {MAX_GRID_SIZE}")
+    profile = str(payload.get("profile", "classic")).lower()
+    raw_answers = payload.get("answers", [])
+    if not isinstance(raw_answers, list) or not 4 <= len(raw_answers) <= 6:
+        raise PayloadError("Provide between four and six theme answers")
+    answers = []
+    for raw_answer in raw_answers:
+        answer = "".join(
+            letter for letter in str(raw_answer).upper() if "A" <= letter <= "Z"
+        )
+        if not 3 <= len(answer) <= cols:
+            raise PayloadError(
+                f"Theme answers must contain between 3 and {cols} letters"
+            )
+        answers.append(answer)
+    if len(set(answers)) != len(answers):
+        raise PayloadError("Theme answers must be unique")
+
+    existing_blocks = None
+    raw_cells = payload.get("cells")
+    if isinstance(raw_cells, list) and len(raw_cells) == rows:
+        if all(
+            isinstance(row, list)
+            and len(row) == cols
+            and all(isinstance(cell, Mapping) for cell in row)
+            for row in raw_cells
+        ):
+            existing_blocks = [
+                [bool(cell.get("black", False)) for cell in row]
+                for row in raw_cells
+            ]
+
+    candidates = search_theme_layouts(
+        rows,
+        cols,
+        answers,
+        profile=profile,
+        seed=seed,
+        word_filler=candidate_dictionary(),
+        desired_results=3,
+        search_attempts=max(
+            30, min(int(payload.get("searchAttempts", 150)), 300)
+        ),
+        existing_blocks=existing_blocks,
+    )
+    title = str(payload.get("title", "Untitled crossword"))[:255]
+    author = str(payload.get("author", ""))[:255]
+    serialized_candidates = []
+    for index, candidate in enumerate(candidates):
+        serialized = serialize_puzzle(candidate.puzzle, locked=candidate.locked)
+        serialized["title"] = title
+        serialized["author"] = author
+        serialized["id"] = f"theme-layout-{index + 1}-{candidate.layout.seed}"
+        serialized["layout"] = {
+            "profile": candidate.layout.profile,
+            "blockCount": candidate.layout.block_count,
+            "targetBlockCount": candidate.layout.target_block_count,
+            "density": candidate.layout.density,
+            "seed": candidate.layout.seed,
+            "currentLayout": candidate.layout.seed == -1,
+        }
+        crossability = theme_crossability(candidate)
+        serialized["placements"] = [
+            {
+                "answerIndex": answer_index,
+                "answer": answers[answer_index],
+                "entryId": entry_id,
+                "row": anchor.row,
+                "col": anchor.col,
+                "length": anchor.length,
+                **crossability[answer_index],
+            }
+            for answer_index, anchor, entry_id in candidate.placements
+        ]
+        rating = {
+            "verified": "Verified fill",
+            "promising": "Promising",
+            "preflight": "Promising",
+            "blocked": "Blocked",
+        }[candidate.verification]
+        serialized["analysis"] = {
+            "verification": candidate.verification,
+            "rating": rating,
+            "viable": candidate.analysis.viable
+            and candidate.verification != "blocked",
+            "score": round(min(99.0, candidate.analysis.score * 10), 1),
+            "minimumDomain": candidate.analysis.minimum_domain,
+            "averageDomain": round(candidate.analysis.average_domain, 1),
+            "message": candidate.probe_message,
+            "tightEntries": [
+                {"id": entry_id, "pattern": pattern, "candidates": count}
+                for entry_id, pattern, count in candidate.analysis.tight_entries
+            ],
+        }
+        serialized_candidates.append(serialized)
+
+    return {
+        "answers": answers,
+        "candidates": serialized_candidates,
+        "message": (
+            "Choose a preflighted layout below."
+            if serialized_candidates
+            else "No standard layout could accommodate this answer set. Try an alternate length or fewer theme answers."
+        ),
+    }
+
+
 class XWGenRequestHandler(BaseHTTPRequestHandler):
     server_version = "XWGen/1.0"
 
@@ -347,6 +463,9 @@ class XWGenRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/layout":
                 self._send_json(layout_response(payload))
+                return
+            if path == "/api/theme-layouts":
+                self._send_json(theme_layouts_response(payload))
                 return
             if path == "/api/export/puz":
                 puzzle = puzzle_from_payload(payload)

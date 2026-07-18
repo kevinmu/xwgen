@@ -31,3 +31,20 @@ class LayoutGeneratorTest(TestCase):
     def test_rejects_grids_too_small_for_standard_rules(self):
         with self.assertRaises(ValueError):
             generate_layout(5, 5)
+
+    def test_reserves_a_symmetric_theme_slot(self):
+        required_white = [(6, col) for col in range(1, 15)]
+        result = generate_layout(
+            15,
+            15,
+            profile="classic",
+            seed=18,
+            attempts=100,
+            required_white=required_white,
+            required_blocks=[(6, 0)],
+        )
+
+        self.assertEqual([], validate_layout(result.blocks))
+        self.assertTrue(result.blocks[6][0])
+        self.assertTrue(result.blocks[8][14])
+        self.assertTrue(all(not result.blocks[6][col] for col in range(1, 15)))
