@@ -31,6 +31,7 @@ def serialize_puzzle(
     puzzle: Puzzle,
     *,
     locked: Optional[Sequence[Sequence[bool]]] = None,
+    dictionary: Optional[WordFiller] = None,
 ) -> Dict[str, Any]:
     cells: List[List[Dict[str, Any]]] = []
     for row_index, row in enumerate(puzzle.grid):
@@ -54,6 +55,12 @@ def serialize_puzzle(
 
     entries = []
     for entry in puzzle.entries.values():
+        pattern = entry.get_current_hint()
+        score = None
+        if dictionary is not None and "." not in pattern:
+            word_id = dictionary.word_id(pattern)
+            if word_id is not None:
+                score = dictionary.quality_score(entry.answer_length, word_id)
         entries.append(
             {
                 "id": entry.index_str(),
@@ -62,9 +69,10 @@ def serialize_puzzle(
                 "row": entry.row_in_grid,
                 "col": entry.col_in_grid,
                 "length": entry.answer_length,
-                "answer": entry.get_current_hint().replace(".", ""),
-                "pattern": entry.get_current_hint(),
+                "answer": pattern.replace(".", ""),
+                "pattern": pattern,
                 "clue": entry.clue or "",
+                "score": score,
             }
         )
 
@@ -232,6 +240,7 @@ def lexicon_metadata(dictionary: Optional[WordFiller] = None) -> Dict[str, Any]:
 
 def fill_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
     puzzle = puzzle_from_payload(payload, locked_only=True)
+    dictionary = candidate_dictionary()
     options = payload.get("options", {})
     if not isinstance(options, Mapping):
         options = {}
@@ -249,10 +258,14 @@ def fill_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
         quality_cutoffs=QUALITY_MODE_CUTOFFS[quality_mode],
     )
     result = PuzzleFiller(
-        word_filler=candidate_dictionary(),
+        word_filler=dictionary,
         config=config,
     ).fill_puzzle(puzzle)
-    response = serialize_puzzle(puzzle, locked=locked_matrix(payload))
+    response = serialize_puzzle(
+        puzzle,
+        locked=locked_matrix(payload),
+        dictionary=dictionary,
+    )
     response["result"] = {
         "status": result.status.value,
         "message": result.message,
@@ -349,13 +362,14 @@ def theme_layouts_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
                 for row in raw_cells
             ]
 
+    dictionary = candidate_dictionary()
     candidates = search_theme_layouts(
         rows,
         cols,
         answers,
         profile=profile,
         seed=seed,
-        word_filler=candidate_dictionary(),
+        word_filler=dictionary,
         desired_results=3,
         search_attempts=max(
             30, min(int(payload.get("searchAttempts", 150)), 300)
@@ -366,7 +380,11 @@ def theme_layouts_response(payload: Mapping[str, Any]) -> Dict[str, Any]:
     author = str(payload.get("author", ""))[:255]
     serialized_candidates = []
     for index, candidate in enumerate(candidates):
-        serialized = serialize_puzzle(candidate.puzzle, locked=candidate.locked)
+        serialized = serialize_puzzle(
+            candidate.puzzle,
+            locked=candidate.locked,
+            dictionary=dictionary,
+        )
         serialized["title"] = title
         serialized["author"] = author
         serialized["id"] = f"theme-layout-{index + 1}-{candidate.layout.seed}"
@@ -445,7 +463,11 @@ class XWGenRequestHandler(BaseHTTPRequestHandler):
                 [bool(square.letter) for square in row]
                 for row in puzzle.grid
             ]
-            response = serialize_puzzle(puzzle, locked=locks)
+            response = serialize_puzzle(
+                puzzle,
+                locked=locks,
+                dictionary=candidate_dictionary(),
+            )
             response["warnings"] = shape_warnings(puzzle)
             self._send_json(response)
             return

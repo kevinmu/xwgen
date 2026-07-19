@@ -4,6 +4,7 @@ from unittest import TestCase
 from puzzle import Puzzle
 from web_server import (
     PayloadError,
+    candidate_dictionary,
     candidate_response,
     fill_response,
     layout_response,
@@ -80,6 +81,17 @@ class WebServerPayloadTest(TestCase):
         response = candidate_response(self.payload)
 
         self.assertIsNone(response["selectedWord"])
+
+    def test_serializes_scores_for_complete_dictionary_entries(self):
+        response = serialize_puzzle(
+            self.puzzle,
+            dictionary=candidate_dictionary(),
+        )
+        entries = {entry["id"]: entry for entry in response["entries"]}
+
+        self.assertEqual("PARE", entries["5A"]["pattern"])
+        self.assertIsNotNone(entries["5A"]["score"])
+        self.assertIsNone(entries["1A"]["score"])
 
     def test_marks_a_complete_word_that_is_not_in_the_lexicon(self):
         for column, letter in enumerate("QZXJ"):

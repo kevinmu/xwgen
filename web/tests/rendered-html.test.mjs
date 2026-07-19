@@ -40,8 +40,9 @@ test("server-renders the XWGen constructor", async () => {
   assert.match(html, /Score/);
   assert.match(html, /50\+ then relax/);
   assert.match(html, /Start at 50\+, then widen only when the grid needs it/);
-  assert.match(html, /Cell color key/);
+  assert.match(html, /Cell and letter color key/);
   assert.match(html, /In progress/);
+  assert.match(html, /Low score/);
   assert.match(html, /Strict 50\+/);
   assert.match(html, /All words/);
   assert.match(html, /Airy · ~12%/);

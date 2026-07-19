@@ -33,6 +33,19 @@ type Entry = {
   pattern: string;
 };
 
+type SerializedEntry = {
+  id: string;
+  clue: string;
+  answer?: string;
+  pattern?: string;
+  score?: number | null;
+};
+
+type EntryScore = {
+  word: string;
+  score: number | null;
+};
+
 type PuzzlePayload = {
   rows: number;
   cols: number;
@@ -41,7 +54,7 @@ type PuzzlePayload = {
   copyright: string;
   note: string;
   cells: Cell[][];
-  entries?: Array<{ id: string; clue: string }>;
+  entries?: SerializedEntry[];
   warnings?: string[];
   result?: FillStats;
   layout?: {
@@ -131,6 +144,23 @@ const API_BASE =
 
 const cloneGrid = (cells: Cell[][]): Cell[][] =>
   cells.map((row) => row.map((cell) => ({ ...cell })));
+
+const entryScoresFrom = (entries?: SerializedEntry[]): Record<string, EntryScore> =>
+  Object.fromEntries(
+    (entries ?? [])
+      .filter((entry) => entry.pattern && !entry.pattern.includes("."))
+      .map((entry) => [
+        entry.id,
+        { word: entry.pattern as string, score: entry.score ?? null },
+      ]),
+  );
+
+const qualityLetterColor = (score: number): string => {
+  const normalized = Math.max(0, Math.min(70, score)) / 70;
+  const saturation = 76 - normalized * 56;
+  const lightness = 42 - normalized * 25;
+  return `hsl(4 ${saturation}% ${lightness}%)`;
+};
 
 const blankGrid = (rows = 15, cols = 15): Cell[][] =>
   Array.from({ length: rows }, () =>
@@ -257,6 +287,7 @@ export default function Home() {
     note: "",
   });
   const [clues, setClues] = useState<Record<string, string>>({});
+  const [entryScores, setEntryScores] = useState<Record<string, EntryScore>>({});
   const [selected, setSelected] = useState<[number, number]>([0, 0]);
   const [direction, setDirection] = useState<Direction>("A");
   const [tool, setTool] = useState<"type" | "block">("type");
@@ -288,6 +319,34 @@ export default function Home() {
   const derived = useMemo(() => deriveEntries(grid), [grid]);
   const numberedGrid = derived.cells;
   const entries = derived.entries;
+  const cellQuality = useMemo(() => {
+    const quality = new Map<string, { score: number; entries: string[] }>();
+
+    entries.forEach((entry) => {
+      const saved = entryScores[entry.id];
+      if (
+        !saved ||
+        saved.score === null ||
+        entry.pattern.includes(".") ||
+        saved.word !== entry.pattern
+      ) {
+        return;
+      }
+      const score = saved.score;
+
+      entry.cells.forEach(([row, col]) => {
+        const key = `${row}:${col}`;
+        const current = quality.get(key);
+        if (!current || score < current.score) {
+          quality.set(key, { score, entries: [entry.id] });
+        } else if (score === current.score) {
+          current.entries.push(entry.id);
+        }
+      });
+    });
+
+    return quality;
+  }, [entries, entryScores]);
 
   const entriesAtSelection = useMemo(
     () =>
@@ -335,6 +394,7 @@ export default function Home() {
     if (puzzle.entries) {
       setClues(Object.fromEntries(puzzle.entries.map((entry) => [entry.id, entry.clue])));
     }
+    setEntryScores(entryScoresFrom(puzzle.entries));
     setPast([]);
     setFuture([]);
     setSelected([0, 0]);
@@ -384,7 +444,23 @@ export default function Home() {
         });
         if (!response.ok) throw new Error("candidate lookup failed");
         const data = (await response.json()) as CandidateResponse;
-        if (!cancelled) setCandidateData(data);
+        if (!cancelled) {
+          setCandidateData(data);
+          const selectedWord = data.selectedWord;
+          if (
+            !activeEntry.pattern.includes(".") &&
+            selectedWord?.word === activeEntry.pattern
+          ) {
+            const score =
+              selectedWord.inLexicon && data.lexicon.scored
+                ? selectedWord.score
+                : null;
+            setEntryScores((current) => ({
+              ...current,
+              [activeEntry.id]: { word: activeEntry.pattern, score },
+            }));
+          }
+        }
       } catch {
         if (!cancelled) setCandidateData(null);
       } finally {
@@ -537,6 +613,14 @@ export default function Home() {
     activeEntry.cells.forEach(([row, col], index) => {
       next[row][col] = { ...next[row][col], letter: word[index], locked: true };
     });
+    const candidate = activeCandidateData?.candidates.find((item) => item.word === word);
+    setEntryScores((current) => ({
+      ...current,
+      [activeEntry.id]: {
+        word,
+        score: activeCandidateData?.lexicon.scored ? (candidate?.score ?? null) : null,
+      },
+    }));
     commitGrid(next);
   };
 
@@ -577,6 +661,7 @@ export default function Home() {
       const data = (await response.json()) as PuzzlePayload & { error?: string };
       if (!response.ok) throw new Error(data.error || "Fill request failed");
       if (data.result?.status === "solved") {
+        setEntryScores(entryScoresFrom(data.entries));
         if (gridOverride) {
           setGrid(data.cells);
           setFuture([]);
@@ -726,6 +811,7 @@ export default function Home() {
 
     commitGrid(next);
     setClues({});
+    setEntryScores({});
     setMetadata((current) => ({
       ...current,
       title: themeName.trim() || "Untitled crossword",
@@ -771,6 +857,7 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || "Layout generation failed");
       commitGrid(data.cells);
       setClues({});
+      setEntryScores({});
       const firstWhite = data.cells
         .flatMap((row, rowIndex) =>
           row.map((cell, colIndex) => ({ cell, rowIndex, colIndex })),
@@ -791,6 +878,7 @@ export default function Home() {
     setGrid(blankGrid());
     setMetadata({ title: "Untitled crossword", author: "", copyright: "", note: "" });
     setClues({});
+    setEntryScores({});
     setPast([]);
     setFuture([]);
     setSelected([0, 0]);
@@ -1032,9 +1120,10 @@ export default function Home() {
                     ? "Use only replaceable entries scored 50 or higher."
                     : "Allow the full word list immediately."}
               </p>
-              <div className="cell-state-key" aria-label="Cell color key">
+              <div className="cell-state-key" aria-label="Cell and letter color key">
                 <span><i className="provisional" aria-hidden="true" />In progress</span>
                 <span><i className="locked" aria-hidden="true" />Locked</span>
+                <span><b className="score-swatch" aria-hidden="true">Ab</b>Low score</span>
               </div>
             </div>
           </section>
@@ -1063,6 +1152,10 @@ export default function Home() {
                 const key = `${rowIndex}:${colIndex}`;
                 const isSelected = key === selectedCell;
                 const isActive = activeCellSet.has(key);
+                const quality = cellQuality.get(key);
+                const qualityDescription = quality
+                  ? `, lowest crossing word score ${quality.score} from ${quality.entries.join(" and ")}`
+                  : "";
                 return (
                   <button
                     key={key}
@@ -1070,11 +1163,19 @@ export default function Home() {
                     className={`grid-cell ${cell.black ? "black" : ""} ${cell.letter && !cell.locked ? "provisional" : ""} ${isActive ? "in-entry" : ""} ${isSelected ? "selected" : ""} ${cell.locked ? "locked" : ""} ${colIndex === row.length - 1 ? "last-column" : ""} ${rowIndex === numberedGrid.length - 1 ? "last-row" : ""}`}
                     onClick={() => selectCell(rowIndex, colIndex)}
                     onKeyDown={handleCellKeyDown}
-                    aria-label={cell.black ? `Block at row ${rowIndex + 1}, column ${colIndex + 1}` : `Row ${rowIndex + 1}, column ${colIndex + 1}${cell.letter ? `, ${cell.letter}` : ""}`}
+                    aria-label={cell.black ? `Block at row ${rowIndex + 1}, column ${colIndex + 1}` : `Row ${rowIndex + 1}, column ${colIndex + 1}${cell.letter ? `, ${cell.letter}` : ""}${qualityDescription}`}
+                    title={quality ? `Lowest crossing word score: ${quality.score} (${quality.entries.join(", ")})` : undefined}
                     tabIndex={isSelected ? 0 : -1}
                   >
                     {!cell.black && cell.number ? <span className="cell-number">{cell.number}</span> : null}
-                    {!cell.black ? <span className="cell-letter">{cell.letter}</span> : null}
+                    {!cell.black ? (
+                      <span
+                        className={`cell-letter ${quality ? "quality-scored" : ""}`}
+                        style={quality ? { color: qualityLetterColor(quality.score) } : undefined}
+                      >
+                        {cell.letter}
+                      </span>
+                    ) : null}
                   </button>
                 );
               }),
