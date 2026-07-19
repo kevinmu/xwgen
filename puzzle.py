@@ -1,4 +1,6 @@
 """Class representing the crossword grid."""
+from __future__ import annotations
+
 import collections
 from typing import List, Tuple, Dict
 
@@ -8,7 +10,10 @@ from string_utils import merge_strings_with_same_num_lines
 from string_utils import remove_last_line_from_string
 from word_filler import WordFiller
 
-import puz
+try:
+    import puz
+except ImportError:  # Core grid filling does not require .puz export support.
+    puz = None
 
 
 class Puzzle:
@@ -48,6 +53,14 @@ class Puzzle:
 
     # setup function to be run after setting all black squares
     def initialize(self) -> None:
+        self.index = 0
+        for row in self.grid:
+            for square in row:
+                square.index = None
+                square.starts_down_word = False
+                square.starts_across_word = False
+                square.across_entry_parent = None
+                square.down_entry_parent = None
         self._number_squares()
         self.entries = self._generate_entries_from_numbered_squares()
 
@@ -248,7 +261,7 @@ class Puzzle:
         puzzle.copyright = lines[4]
         puzzle.note = lines[5]
 
-        for r, line in enumerate(lines[6:6+cols]):
+        for r, line in enumerate(lines[6:6+rows]):
             for c, letter in enumerate(line):
                 if letter == "*":
                     puzzle.mark_black_square((r, c))
@@ -258,7 +271,7 @@ class Puzzle:
         puzzle.initialize()
 
         # read in clues
-        for clue_str in lines[6+cols:]:
+        for clue_str in lines[6+rows:]:
             index_str = Entry.index_from_clue_str(clue_str)
             puzzle.entries[index_str].unmarshal_clue_str(clue_str)
 
@@ -291,6 +304,11 @@ class Puzzle:
     # Code adapted from https://github.com/svisser/crossword.
     # The original code was missing logic to populate the fill.
     def to_puz_puzzle(self) -> puz.Puzzle:
+        if puz is None:
+            raise RuntimeError(
+                "puzpy is required for .puz export; install it with "
+                "`python -m pip install -r requirements.txt`"
+            )
         result = puz.Puzzle()
         result.width = self.cols
         result.height = self.rows

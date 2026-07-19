@@ -8,7 +8,12 @@ __pycache__/
 # Distribution / packaging
 .Python
 env/
+.venv/
+data/spreadthewordlist.txt
+data/*.part
 build/
+!web/build/
+!web/build/**
 develop-eggs/
 dist/
 downloads/

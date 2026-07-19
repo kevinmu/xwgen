@@ -1,9 +1,9 @@
 """Main runner class for xwgen"""
 from puzzle import Puzzle
-from puzzle_filler import PuzzleFiller
+from puzzle_filler import FillStatus, PuzzleFiller
 
 
-def main():
+def main() -> int:
     puzzle = Puzzle(15, 15)
     puzzle.title = "Test Puzzle #1"
     puzzle.author = "Kevin Mu"
@@ -33,18 +33,15 @@ def main():
     puzzle.render()
 
     puzzle_filler = PuzzleFiller()
-    puzzle_filler.fill_puzzle_using_heuristic(puzzle)
-    #puzzle_filler.fill_puzzle_using_backtracking(puzzle)
-
-
-    failed_entries = puzzle.validate_puzzle(puzzle_filler.word_filler)
-    print("NUMBER OF FAILED ENTRIES: ", len(failed_entries))
-    for entry in failed_entries:
-        print(entry.index_str(), entry.get_current_hint())
+    result = puzzle_filler.fill_puzzle(puzzle)
+    print(result)
+    if result.status is not FillStatus.SOLVED:
+        return 1
 
     puzzle.render()
     puzzle.export_as_ascii("puzz1.out")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
